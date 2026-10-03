@@ -1,11 +1,48 @@
+# --- Existing entries (kept) ---
 .xml
 .meta
 .env
 .idea
-.gitignore
 .yaml
 .yml
+# Holds the database password until Phase 6 replaces it with environment variables.
 /target/classes/application.yml
 /src/main/resources/application.yml
 _*_*
 _*
+
+# --- Maven build output ---
+/target/
+*.class
+*.jar
+*.war
+!.mvn/wrapper/maven-wrapper.jar
+
+# --- Logs and JVM crash dumps ---
+*.log
+hs_err_pid*
+replay_pid*
+
+# --- IDEs ---
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+.classpath
+.project
+.settings/
+.factorypath
+
+# --- Local configuration and secrets ---
+.env.*
+!.env.example
+application-local.yml
+application-local.properties
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+
+# --- Generated ---
+HELP.md

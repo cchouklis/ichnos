@@ -32,7 +32,7 @@ export class ExportService {
 
   exportJson(): void {
     const dto = this.store.toProjectDto();
-    const payload = { ...dto, exportedAt: new Date().toISOString() };
+    const payload = { schemaVersion: 2, units: 'mm', ...dto, exportedAt: new Date().toISOString() };
     this.download(JSON.stringify(payload, null, 2), `${this.sanitizeFilename(this.store.projectName())}.json`, 'application/json');
   }
 

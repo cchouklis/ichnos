@@ -6,8 +6,8 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "typecheck": "ngc -p tsconfig.app.json --noEmit",
-    "test": "node --test \"src/**/*.test.ts\""
+    "typecheck": "node node_modules/@angular/compiler-cli/bundles/src/bin/ngc.js -p tsconfig.app.json --noEmit",
+    "test": "node --import ./scripts/register-ts.mjs --test \"src/**/*.test.ts\""
   },
   "private": true,
   "dependencies": {

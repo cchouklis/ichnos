@@ -7,36 +7,59 @@ import {
   HostListener,
   OnDestroy,
   ViewChild,
+  computed,
   effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { SafeHtml } from '@angular/platform-browser';
-import { ComponentInstance, Point, Room, Tool, Wall, Wire } from '../../core/models';
+import type { ComponentInstance, ElementKind, ElementRef as PlanElementRef, Point, Room, Tool, Wall, Wire } from '../../core/models';
 import { typeById } from '../../core/data/component-types.data';
+import { mmToMeters } from '../../core/units/units.util';
+import { EditorStore, type InteractionMode } from '../../core/state/editor.store';
+import { LayoutStore } from '../../core/state/layout.store';
 import { ProjectStore } from '../../core/state/project-store.service';
 import { ThemeService } from '../../core/theme/theme.service';
 import { circuitColor } from '../../core/theme/theme.util';
 import { DragDropService } from '../../core/services/drag-drop.service';
 import { IconRegistryService } from '../../core/services/icon-registry.service';
+import { clamp, pathFromWaypoints, shoelaceArea, wireWaypoints } from '../../core/util/geometry.util';
 import {
-  clamp,
-  findWallSnap,
-  pathFromWaypoints,
-  shoelaceArea,
-  snapDraftPoint,
-  wireWaypoints,
-} from '../../core/util/geometry.util';
+  ALL_KINDS,
+  allElements,
+  elementsInRect,
+  includesRef,
+  toggleRef,
+  type Rect,
+} from '../../core/util/selection.util';
+import { ToolButtonComponent } from '../ui/tool-button.component';
+import { ToolPanelComponent } from '../tool-panel/tool-panel.component';
+import type { CanvasTool, PointerInfo } from './tools/canvas-tool';
+import { ComponentTool } from './tools/component.tool';
+import { RoomTool } from './tools/room.tool';
+import { SelectTool } from './tools/select.tool';
+import { WallTool } from './tools/wall.tool';
+import { WireTool } from './tools/wire.tool';
+
+/** What the pointer that is currently down is doing. */
+type Gesture = 'none' | 'tool' | 'marquee' | 'pan' | 'multitouch';
+
+const MARQUEE_MIN_PX = 3;
+const HIT_WIDTH_PX = 18;
+const KIND_SET: ReadonlySet<string> = new Set<ElementKind>(ALL_KINDS);
 
 @Component({
   selector: 'cp-canvas',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, ToolButtonComponent, ToolPanelComponent],
   templateUrl: './canvas.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CanvasComponent implements AfterViewInit, OnDestroy {
   readonly store = inject(ProjectStore);
+  readonly editor = inject(EditorStore);
+  private readonly layout = inject(LayoutStore);
   private readonly dragDrop = inject(DragDropService);
   private readonly icons = inject(IconRegistryService);
   private readonly theme = inject(ThemeService);
@@ -48,27 +71,61 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
 
   readonly PX = this.store.scalePxPerMeter;
 
-  // ---- draft/interaction state (ephemeral, not part of the undoable document) ----
-  readonly wallDraftPreview = signal<Point[] | null>(null);
-  readonly wallGhostPoint = signal<Point | null>(null);
-  readonly roomDraftPreview = signal<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
-  readonly wireDraftPreview = signal<{ from: Point; to: Point } | null>(null);
+  // ---- tool strategies --------------------------------------------------------------------
+  private readonly env = { project: this.store, editor: this.editor };
+  readonly selectTool = new SelectTool(this.env);
+  readonly wallTool = new WallTool(this.env);
+  readonly roomTool = new RoomTool(this.env);
+  readonly wireTool = new WireTool(this.env);
+  readonly componentTool = new ComponentTool(this.env);
+  private readonly tools: Record<Tool, CanvasTool> = {
+    select: this.selectTool,
+    wall: this.wallTool,
+    room: this.roomTool,
+    wire: this.wireTool,
+    component: this.componentTool,
+  };
 
-  private roomDraftStart: Point | null = null;
-  private wireDraftFrom: string | null = null;
-  private dragComp: { id: string; preSnapshot: string; moved: boolean } | null = null;
+  private readonly activeTool = computed(() => this.tools[this.editor.tool()]);
+  readonly hint = computed(() => this.activeTool().hint());
+
+  // ---- transient interaction state --------------------------------------------------------
+  /** Box selection in progress, in plan coordinates (metres). */
+  readonly marquee = signal<Rect | null>(null);
+  readonly spaceDown = signal(false);
+  readonly panning = signal(false);
+
+  private gesture: Gesture = 'none';
+  private marqueeAdditive = false;
+  private marqueeStartClient: Point | null = null;
   private panDrag: { startClientX: number; startClientY: number; startPan: Point } | null = null;
   private readonly activePointers = new Map<number, PointerEvent>();
-  private pinchStartDist = 0;
-  private pinchStartZoom = 1;
+  private pinch: { dist: number; zoom: number; anchorPlan: Point } | null = null;
   private readonly onWheelBound = (e: WheelEvent) => this.onWheel(e);
 
+  readonly cursorClass = computed(() => {
+    if (this.panning()) return 'cursor-grabbing';
+    if (this.spaceDown()) return 'cursor-grab';
+    return this.editor.tool() === 'select' ? '' : 'cursor-crosshair';
+  });
+
+  readonly hitWidth = computed(() => HIT_WIDTH_PX / this.editor.zoom());
+  readonly armedLabel = computed(() => {
+    const id = this.editor.armedType();
+    return id ? typeById(id).label : null;
+  });
+
+  readonly modes: { id: InteractionMode; label: string; description: string }[] = [
+    { id: 'draw', label: 'Draw', description: 'Taps add walls, components or wires with the active tool.' },
+    { id: 'erase', label: 'Erase', description: 'Tap a wall, component or wire to delete it.' },
+    { id: 'select', label: 'Select', description: 'Tap to select, or drag a box around several items.' },
+  ];
+
   constructor() {
-    // Clears in-progress drafts whenever the active tool changes, regardless of
-    // where the change originated (this component's own dock, or the mobile nav).
+    // Drop in-progress drafts whenever the active tool changes, wherever the change came from.
     effect(() => {
-      this.store.tool();
-      this.cancelDrafts();
+      this.editor.tool();
+      untracked(() => this.resetGestures());
     });
   }
 
@@ -82,240 +139,372 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
   }
 
   // ---------------------------------------------------------------------
-  // Tool selection
+  // Toolbar
   // ---------------------------------------------------------------------
   setTool(tool: Tool): void {
-    this.store.setTool(tool);
+    this.editor.setTool(tool);
   }
 
-  private cancelDrafts(): void {
-    this.wallDraftPreview.set(null);
-    this.wallGhostPoint.set(null);
-    this.roomDraftStart = null;
-    this.roomDraftPreview.set(null);
-    this.wireDraftFrom = null;
-    this.wireDraftPreview.set(null);
+  /** The component tool needs an armed type; without one, send the user to the guide's component step. */
+  openComponentTool(): void {
+    if (this.editor.armedType()) this.editor.setTool('component');
+    else this.layout.open('components');
   }
 
-  private commitWall(): void {
-    const pts = this.wallDraftPreview();
-    if (pts && pts.length >= 2) this.store.commitWallChain(pts);
-    this.wallDraftPreview.set(null);
-    this.wallGhostPoint.set(null);
+  setMode(mode: InteractionMode): void {
+    this.editor.setMode(mode);
+  }
+
+  private resetGestures(): void {
+    for (const t of Object.values(this.tools)) t.reset();
+    this.marquee.set(null);
+    this.panDrag = null;
+    this.panning.set(false);
+    this.gesture = 'none';
   }
 
   // ---------------------------------------------------------------------
   // Coordinate conversion
   // ---------------------------------------------------------------------
-  private svgPointFromEvent(e: PointerEvent | WheelEvent): Point {
+  private svgPointFromClient(clientX: number, clientY: number): Point {
     const svg = this.svgRef.nativeElement;
     const pt = svg.createSVGPoint();
-    pt.x = e.clientX;
-    pt.y = e.clientY;
+    pt.x = clientX;
+    pt.y = clientY;
     const ctm = svg.getScreenCTM();
     if (!ctm) return { x: 0, y: 0 };
     const p = pt.matrixTransform(ctm.inverse());
     return { x: p.x, y: p.y };
   }
 
-  private toMeters(viewBoxPoint: Point): Point {
-    const z = this.store.zoom();
-    const pan = this.store.pan();
-    return { x: (viewBoxPoint.x - pan.x) / z / this.PX, y: (viewBoxPoint.y - pan.y) / z / this.PX };
+  private viewToPlan(view: Point, zoom = this.editor.zoom(), pan = this.editor.pan()): Point {
+    return { x: (view.x - pan.x) / zoom / this.PX, y: (view.y - pan.y) / zoom / this.PX };
   }
 
-  private metersToView(m: Point): Point {
-    const z = this.store.zoom();
-    const pan = this.store.pan();
-    return { x: m.x * this.PX * z + pan.x, y: m.y * this.PX * z + pan.y };
+  private planToView(plan: Point): Point {
+    const z = this.editor.zoom();
+    const pan = this.editor.pan();
+    return { x: plan.x * this.PX * z + pan.x, y: plan.y * this.PX * z + pan.y };
   }
 
-  private eventToMeters(e: PointerEvent | WheelEvent): Point {
-    return this.toMeters(this.svgPointFromEvent(e));
+  private planFromEvent(e: { clientX: number; clientY: number }): Point {
+    return this.viewToPlan(this.svgPointFromClient(e.clientX, e.clientY));
+  }
+
+  private hitFromEvent(e: PointerEvent): PlanElementRef | null {
+    const el = (e.target as Element | null)?.closest?.('[data-el-kind]');
+    const kind = el?.getAttribute('data-el-kind');
+    const id = el?.getAttribute('data-el-id');
+    return kind && id && KIND_SET.has(kind) ? { kind: kind as ElementKind, id } : null;
+  }
+
+  private infoFromEvent(e: PointerEvent, withHit: boolean): PointerInfo {
+    return { plan: this.planFromEvent(e), hit: withHit ? this.hitFromEvent(e) : null, shift: e.shiftKey };
   }
 
   // ---------------------------------------------------------------------
   // Pointer interaction
+  //   left            → active tool          right (mouse)   → erase
+  //   Ctrl/Cmd + drag → box select           middle / Space  → pan
+  //   touch           → Draw / Erase / Select mode, two fingers pan + zoom
   // ---------------------------------------------------------------------
   onSvgPointerDown(e: PointerEvent): void {
     this.activePointers.set(e.pointerId, e);
     if (this.activePointers.size === 2) {
-      this.startPinch();
+      this.beginMultiTouch();
+      return;
+    }
+    if (this.activePointers.size > 2 || this.gesture === 'multitouch') return;
+
+    const isMouse = e.pointerType === 'mouse';
+    const tool = this.activeTool();
+
+    if (e.button === 1 || (e.button === 0 && this.spaceDown())) {
+      e.preventDefault();
+      this.beginPan(e);
+      return;
+    }
+    if (isMouse && e.button === 2) {
+      e.preventDefault();
+      tool.secondaryDown(this.infoFromEvent(e, true));
+      return;
+    }
+    if (e.button !== 0) return;
+
+    const info = this.infoFromEvent(e, true);
+
+    if (isMouse && (e.ctrlKey || e.metaKey)) {
+      this.beginMarquee(e, info.plan);
       return;
     }
 
-    const m = this.eventToMeters(e);
-    const tool = this.store.tool();
-
-    if (tool === 'pan' || e.button === 1) {
-      this.panDrag = { startClientX: e.clientX, startClientY: e.clientY, startPan: this.store.pan() };
-      return;
-    }
-
-    if (tool === 'wall') {
-      const draft = this.wallDraftPreview() ?? [];
-      const snapped = snapDraftPoint(m, this.store.walls(), draft[0]);
-      this.wallDraftPreview.set([...draft, snapped]);
-      return;
-    }
-
-    if (tool === 'room') {
-      this.roomDraftStart = m;
-      this.roomDraftPreview.set({ x1: m.x, y1: m.y, x2: m.x, y2: m.y });
-      return;
-    }
-
-    const targetId = this.componentIdFromEvent(e);
-
-    if (tool === 'wire') {
-      if (targetId) {
-        if (!this.wireDraftFrom) {
-          this.wireDraftFrom = targetId;
-        } else if (this.wireDraftFrom !== targetId) {
-          this.store.addWire(this.wireDraftFrom, targetId);
-          this.wireDraftFrom = null;
-          this.wireDraftPreview.set(null);
-        }
+    if (!isMouse) {
+      const mode = this.editor.mode();
+      if (mode === 'erase') {
+        tool.secondaryDown(info);
+        return;
       }
-      return;
+      if (mode === 'select') {
+        this.touchSelect(e, info, tool);
+        return;
+      }
     }
 
-    // select tool
-    if (targetId) {
-      this.store.selectComponent(targetId);
-      this.dragComp = { id: targetId, preSnapshot: this.store.captureSnapshot(), moved: false };
-      return;
-    }
-    this.store.selectComponent(null);
+    this.gesture = 'tool';
+    tool.primaryDown(info);
+    if (tool.id === 'select' && !info.hit) this.beginMarquee(e, info.plan);
   }
 
-  private componentIdFromEvent(e: PointerEvent): string | null {
-    const el = (e.target as Element).closest('[data-comp-id]');
-    return el ? el.getAttribute('data-comp-id') : null;
+  /** Touch "select" mode: tap an element to toggle it, drag from empty space to box-select. */
+  private touchSelect(e: PointerEvent, info: PointerInfo, tool: CanvasTool): void {
+    if (info.hit && tool.kinds.includes(info.hit.kind)) {
+      this.editor.setSelection(toggleRef(this.editor.selection(), info.hit));
+      return;
+    }
+    this.beginMarquee(e, info.plan, true);
+  }
+
+  private beginMarquee(e: PointerEvent, plan: Point, additive = e.shiftKey): void {
+    this.gesture = 'marquee';
+    this.marqueeAdditive = additive;
+    this.marqueeStartClient = { x: e.clientX, y: e.clientY };
+    this.marquee.set({ x1: plan.x, y1: plan.y, x2: plan.x, y2: plan.y });
+  }
+
+  private beginPan(e: PointerEvent): void {
+    this.gesture = 'pan';
+    this.panning.set(true);
+    this.panDrag = { startClientX: e.clientX, startClientY: e.clientY, startPan: this.editor.pan() };
   }
 
   @HostListener('window:pointermove', ['$event'])
   onWindowPointerMove(e: PointerEvent): void {
     if (this.activePointers.has(e.pointerId)) this.activePointers.set(e.pointerId, e);
-    if (this.activePointers.size === 2) {
-      this.updatePinch();
-      return;
-    }
 
-    if (this.dragDrop.draggingTypeId()) {
-      this.dragDrop.move(e.clientX, e.clientY);
-    }
+    if (this.dragDrop.draggingTypeId()) this.dragDrop.move(e.clientX, e.clientY);
 
-    if (this.panDrag) {
-      this.store.setPan({
-        x: this.panDrag.startPan.x + (e.clientX - this.panDrag.startClientX),
-        y: this.panDrag.startPan.y + (e.clientY - this.panDrag.startClientY),
-      });
-      return;
-    }
-    if (this.dragComp) {
-      const m = this.eventToMeters(e);
-      this.dragComp.moved = true;
-      const snap = findWallSnap(m, this.store.walls());
-      this.store.moveComponentLive(this.dragComp.id, snap?.x ?? m.x, snap?.y ?? m.y, snap?.rotDeg);
-      return;
-    }
-    const tool = this.store.tool();
-    if (tool === 'wall' && this.wallDraftPreview()) {
-      const pts = this.wallDraftPreview()!;
-      this.wallGhostPoint.set(snapDraftPoint(this.eventToMeters(e), this.store.walls(), pts[0]));
-    }
-    if (tool === 'room' && this.roomDraftStart) {
-      const m = this.eventToMeters(e);
-      this.roomDraftPreview.set({ x1: this.roomDraftStart.x, y1: this.roomDraftStart.y, x2: m.x, y2: m.y });
-    }
-    if (tool === 'wire' && this.wireDraftFrom) {
-      const a = this.store.components().find((c) => c.id === this.wireDraftFrom);
-      if (a) this.wireDraftPreview.set({ from: { x: a.x, y: a.y }, to: this.eventToMeters(e) });
+    switch (this.gesture) {
+      case 'multitouch':
+        this.updateMultiTouch();
+        return;
+      case 'pan':
+        if (this.panDrag) {
+          this.editor.setPan({
+            x: this.panDrag.startPan.x + (e.clientX - this.panDrag.startClientX),
+            y: this.panDrag.startPan.y + (e.clientY - this.panDrag.startClientY),
+          });
+        }
+        return;
+      case 'marquee': {
+        const m = this.marquee();
+        if (m) {
+          const p = this.planFromEvent(e);
+          this.marquee.set({ ...m, x2: p.x, y2: p.y });
+        }
+        return;
+      }
+      default:
+        this.activeTool().move(this.infoFromEvent(e, false));
     }
   }
 
   @HostListener('window:pointerup', ['$event'])
   onWindowPointerUp(e: PointerEvent): void {
     this.activePointers.delete(e.pointerId);
-    if (this.activePointers.size < 2) this.pinchStartDist = 0;
 
     const draggingType = this.dragDrop.draggingTypeId();
     if (draggingType) {
       const rect = this.svgRef.nativeElement.getBoundingClientRect();
       if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-        const m = this.eventToMeters(e);
-        this.store.addComponentAt(draggingType, m.x, m.y);
+        const m = this.planFromEvent(e);
+        this.store.addComponentAt(draggingType, m.x, m.y, { circuit: this.editor.placeCircuit() });
       }
       this.dragDrop.end();
       return;
     }
 
-    if (this.panDrag) {
-      this.panDrag = null;
-      return;
-    }
-    if (this.dragComp) {
-      if (this.dragComp.moved) {
-        this.store.commitComponentDrag(this.dragComp.id, this.dragComp.preSnapshot);
-      }
-      this.dragComp = null;
-      return;
-    }
-    if (this.store.tool() === 'room' && this.roomDraftStart) {
-      const m = this.eventToMeters(e);
-      this.store.addQuickRoom(this.roomDraftStart.x, this.roomDraftStart.y, m.x, m.y);
-      this.roomDraftStart = null;
-      this.roomDraftPreview.set(null);
+    switch (this.gesture) {
+      case 'multitouch':
+        if (this.activePointers.size === 0) {
+          this.pinch = null;
+          this.gesture = 'none';
+        }
+        return;
+      case 'pan':
+        this.panDrag = null;
+        this.panning.set(false);
+        this.gesture = 'none';
+        return;
+      case 'marquee':
+        this.finishMarquee(e);
+        this.gesture = 'none';
+        return;
+      case 'tool':
+        this.gesture = 'none';
+        this.activeTool().primaryUp(this.infoFromEvent(e, false));
+        return;
+      default:
     }
   }
 
+  @HostListener('window:pointercancel', ['$event'])
+  onPointerCancel(e: PointerEvent): void {
+    this.activePointers.delete(e.pointerId);
+    if (this.activePointers.size === 0) this.resetGestures();
+  }
+
+  private finishMarquee(e: PointerEvent): void {
+    const m = this.marquee();
+    const start = this.marqueeStartClient;
+    this.marquee.set(null);
+    this.marqueeStartClient = null;
+    if (!m || !start) return;
+
+    const dragged = Math.hypot(e.clientX - start.x, e.clientY - start.y) >= MARQUEE_MIN_PX;
+    if (!dragged) {
+      // A plain click on empty space clears the selection.
+      if (!this.marqueeAdditive) this.editor.clearSelection();
+      return;
+    }
+    const doc = this.documentSnapshot();
+    const found = elementsInRect(doc, m, this.activeTool().kinds);
+    if (!this.marqueeAdditive) {
+      this.editor.setSelection(found);
+      return;
+    }
+    const merged = [...this.editor.selection()];
+    for (const ref of found) if (!includesRef(merged, ref)) merged.push(ref);
+    this.editor.setSelection(merged);
+  }
+
+  private documentSnapshot() {
+    return {
+      walls: this.store.walls(),
+      rooms: this.store.rooms(),
+      components: this.store.components(),
+      wires: this.store.wires(),
+    };
+  }
+
+  /** Mouse users never see the browser menu on the plan: right-click is "erase". Touch long-press is ignored. */
+  onContextMenu(e: Event): void {
+    e.preventDefault();
+  }
+
   onSvgDoubleClick(): void {
-    if (this.store.tool() === 'wall') this.commitWall();
+    this.activeTool().commit();
+  }
+
+  // ---------------------------------------------------------------------
+  // Two-finger pan + pinch zoom (touch)
+  // ---------------------------------------------------------------------
+  private beginMultiTouch(): void {
+    // Finish whatever the first finger was doing before the viewport starts moving.
+    this.activeTool().interrupt();
+    this.marquee.set(null);
+    this.marqueeStartClient = null;
+    this.gesture = 'multitouch';
+
+    const [a, b] = Array.from(this.activePointers.values());
+    const mid = this.midpoint(a, b);
+    this.pinch = {
+      dist: Math.max(1, Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)),
+      zoom: this.editor.zoom(),
+      anchorPlan: this.planFromEvent(mid),
+    };
+  }
+
+  private updateMultiTouch(): void {
+    if (!this.pinch || this.activePointers.size < 2) return;
+    const [a, b] = Array.from(this.activePointers.values());
+    const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    this.editor.setZoom(this.pinch.zoom * (dist / this.pinch.dist));
+    // Keep the plan point that started under the fingers' midpoint under them as they move.
+    const view = this.svgPointFromClient(this.midpoint(a, b).clientX, this.midpoint(a, b).clientY);
+    const z = this.editor.zoom();
+    this.editor.setPan({
+      x: view.x - this.pinch.anchorPlan.x * this.PX * z,
+      y: view.y - this.pinch.anchorPlan.y * this.PX * z,
+    });
+  }
+
+  private midpoint(a: PointerEvent, b: PointerEvent): { clientX: number; clientY: number } {
+    return { clientX: (a.clientX + b.clientX) / 2, clientY: (a.clientY + b.clientY) / 2 };
+  }
+
+  // ---------------------------------------------------------------------
+  // Keyboard
+  // ---------------------------------------------------------------------
+  private isTypingTarget(target: EventTarget | null): boolean {
+    const el = target as HTMLElement | null;
+    if (!el) return false;
+    return ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable;
   }
 
   @HostListener('window:keydown', ['$event'])
   onKeydown(e: KeyboardEvent): void {
-    const tag = (document.activeElement as HTMLElement | null)?.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (this.isTypingTarget(e.target)) return;
 
-    if (e.key === 'Escape') this.cancelDrafts();
-    if (e.key === 'Enter' && this.store.tool() === 'wall') this.commitWall();
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+    if (e.code === 'Space') {
+      // Leave Space alone on focused controls, where it activates the control.
+      if ((e.target as HTMLElement | null)?.closest?.('button, a, summary, [role="button"]')) return;
       e.preventDefault();
-      e.shiftKey ? this.store.redo() : this.store.undo();
+      this.spaceDown.set(true);
+      return;
     }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
-      e.preventDefault();
-      this.store.redo();
+
+    const key = e.key.toLowerCase();
+    if (e.ctrlKey || e.metaKey) {
+      // Letter shortcuts must NOT fire while Ctrl/Cmd is held (Ctrl+C is copy, not the wire tool).
+      if (key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) this.store.redo();
+        else this.store.undo();
+      } else if (key === 'y') {
+        e.preventDefault();
+        this.store.redo();
+      } else if (key === 'a') {
+        e.preventDefault();
+        this.editor.setSelection(allElements(this.documentSnapshot(), this.activeTool().kinds));
+      }
+      return;
     }
-    if ((e.key === 'Delete' || e.key === 'Backspace') && this.store.selectedId()) {
-      this.store.deleteSelected();
+    if (e.altKey) return;
+
+    switch (e.key) {
+      case 'Escape':
+        if (!this.activeTool().cancel()) this.editor.clearSelection();
+        return;
+      case 'Enter':
+        this.activeTool().commit();
+        return;
+      case 'Delete':
+      case 'Backspace':
+        if (this.editor.selection().length) {
+          e.preventDefault();
+          this.store.deleteSelection();
+        }
+        return;
+      default:
     }
-    if (e.key === 'v') this.setTool('select');
-    if (e.key === 'w') this.setTool('wall');
-    if (e.key === 'r') this.setTool('room');
-    if (e.key === 'c') this.setTool('wire');
+    switch (key) {
+      case 'v': this.setTool('select'); break;
+      case 'w': this.setTool('wall'); break;
+      case 'r': this.setTool('room'); break;
+      case 'c': this.setTool('wire'); break;
+      case 'p': this.openComponentTool(); break;
+      default:
+    }
   }
 
-  // ---------------------------------------------------------------------
-  // Pinch-to-zoom (touch)
-  // ---------------------------------------------------------------------
-  private dist(a: PointerEvent, b: PointerEvent): number {
-    return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+  @HostListener('window:keyup', ['$event'])
+  onKeyup(e: KeyboardEvent): void {
+    if (e.code === 'Space') this.spaceDown.set(false);
   }
 
-  private startPinch(): void {
-    const pts = Array.from(this.activePointers.values());
-    this.pinchStartDist = this.dist(pts[0], pts[1]);
-    this.pinchStartZoom = this.store.zoom();
-  }
-
-  private updatePinch(): void {
-    if (!this.pinchStartDist) return;
-    const pts = Array.from(this.activePointers.values());
-    const ratio = this.dist(pts[0], pts[1]) / this.pinchStartDist;
-    this.store.setZoom(this.pinchStartZoom * ratio);
+  @HostListener('window:blur')
+  onWindowBlur(): void {
+    this.spaceDown.set(false);
   }
 
   // ---------------------------------------------------------------------
@@ -324,35 +513,29 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
   // ---------------------------------------------------------------------
   private onWheel(e: WheelEvent): void {
     e.preventDefault();
-    const svg = this.svgRef.nativeElement;
-    const rect = svg.getBoundingClientRect();
-    const vb = svg.viewBox.baseVal;
-    const vbx = vb.x + ((e.clientX - rect.left) / rect.width) * vb.width;
-    const vby = vb.y + ((e.clientY - rect.top) / rect.height) * vb.height;
-    const before = this.toMeters({ x: vbx, y: vby });
+    const view = this.svgPointFromClient(e.clientX, e.clientY);
+    const before = this.viewToPlan(view);
     const factor = e.deltaY < 0 ? 1.1 : 0.9;
-    this.store.setZoom(this.store.zoom() * factor);
-    const after = this.metersToView(before);
-    const pan = this.store.pan();
-    this.store.setPan({ x: pan.x + (vbx - after.x), y: pan.y + (vby - after.y) });
+    this.editor.setZoom(this.editor.zoom() * factor);
+    const after = this.planToView(before);
+    const pan = this.editor.pan();
+    this.editor.setPan({ x: pan.x + (view.x - after.x), y: pan.y + (view.y - after.y) });
   }
 
-  // ---------------------------------------------------------------------
-  // Zoom controls
-  // ---------------------------------------------------------------------
   zoomIn(): void {
-    this.store.setZoom(this.store.zoom() * 1.2);
+    this.editor.setZoom(this.editor.zoom() * 1.2);
   }
+
   zoomOut(): void {
-    this.store.setZoom(this.store.zoom() * 0.8);
+    this.editor.setZoom(this.editor.zoom() * 0.8);
   }
+
   fitToView(): void {
     const walls = this.store.walls();
-    const svg = this.svgRef.nativeElement;
-    const vb = svg.viewBox.baseVal;
+    const vb = this.svgRef.nativeElement.viewBox.baseVal;
     if (!walls.length) {
-      this.store.setZoom(1);
-      this.store.setPan({ x: 80, y: 80 });
+      this.editor.setZoom(1);
+      this.editor.setPan({ x: 80, y: 80 });
       return;
     }
     const xs = walls.flatMap((w) => [w.x1, w.x2]);
@@ -364,8 +547,8 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
     const wPx = (maxX - minX) * this.PX;
     const hPx = (maxY - minY) * this.PX;
     const z = clamp(Math.min(vb.width / (wPx + 160), vb.height / (hPx + 160)), 0.25, 3);
-    this.store.setZoom(z);
-    this.store.setPan({
+    this.editor.setZoom(z);
+    this.editor.setPan({
       x: vb.x + vb.width / 2 - ((minX + maxX) / 2) * this.PX * z,
       y: vb.y + vb.height / 2 - ((minY + maxY) / 2) * this.PX * z,
     });
@@ -375,8 +558,8 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
   // Template render helpers
   // ---------------------------------------------------------------------
   worldTransform(): string {
-    const p = this.store.pan();
-    const z = this.store.zoom();
+    const p = this.editor.pan();
+    const z = this.editor.zoom();
     return `translate(${p.x},${p.y}) scale(${z})`;
   }
 
@@ -409,8 +592,12 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
     return `${room.label} · ${area.toFixed(1)}m²`;
   }
 
+  strokeWidthForMm(mm: number): number {
+    return Math.max(3, mmToMeters(mm) * this.PX);
+  }
+
   wallStrokeWidth(w: Wall): number {
-    return Math.max(3, w.thickness * this.PX);
+    return this.strokeWidthForMm(w.thicknessMm);
   }
 
   wireD(wire: Wire): string {
@@ -437,16 +624,15 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
     return this.icons.html(typeById(c.type).icon);
   }
 
-  isSelected(id: string): boolean {
-    return this.store.selectedId() === id;
+  isSelected(kind: ElementKind, id: string): boolean {
+    return this.editor.selection().some((r) => r.kind === kind && r.id === id);
   }
 
   wallDraftLines(): { p1: Point; p2: Point }[] {
-    const pts = this.wallDraftPreview();
-    if (!pts) return [];
+    const pts = this.wallTool.draft();
     const lines: { p1: Point; p2: Point }[] = [];
     for (let i = 0; i < pts.length - 1; i++) lines.push({ p1: pts[i], p2: pts[i + 1] });
-    const ghost = this.wallGhostPoint();
+    const ghost = this.wallTool.ghost();
     if (ghost && pts.length) lines.push({ p1: pts[pts.length - 1], p2: ghost });
     return lines;
   }

@@ -1,13 +1,24 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { ComponentInstance, Point, ProjectDto, Room, Tool, ViewMode, Wall, Wire } from '../models';
+import type { ComponentInstance, ElementRef, Point, ProjectDto, Room, ViewMode, Wall, Wire } from '../models';
 import { typeById } from '../data/component-types.data';
+import { WALL_HEIGHT_MM, WALL_THICKNESS_MM } from '../units/units.util';
 import { IdService } from '../services/id.service';
 import { avoidOverlap, distance, findWallSnap, wireLengthMeters } from '../util/geometry.util';
+import { removeElements } from '../util/selection.util';
+import { EditorStore } from './editor.store';
 
 const MAX_HISTORY = 60;
 
-/** Centre of the plan SVG's viewBox (900 x 700, see canvas.component.html). */
-const VIEW_CENTER = { x: 450, y: 350 };
+export interface PlaceOptions {
+  circuit?: number | null;
+  mountHeightMm?: number | null;
+  rotDeg?: number;
+}
+
+export interface WallDims {
+  thicknessMm: number;
+  heightMm: number;
+}
 
 interface Snapshot {
   walls: Wall[];
@@ -19,6 +30,7 @@ interface Snapshot {
 @Injectable({ providedIn: 'root' })
 export class ProjectStore {
   private readonly ids = inject(IdService);
+  private readonly editor = inject(EditorStore);
 
   // ---- document state -----------------------------------------------
   readonly walls = signal<Wall[]>([]);
@@ -30,17 +42,13 @@ export class ProjectStore {
   readonly scalePxPerMeter = 60;
 
   // ---- UI / editor state ----------------------------------------------
-  readonly selectedId = signal<string | null>(null);
-  readonly tool = signal<Tool>('select');
   readonly view = signal<ViewMode>('2d');
-  readonly zoom = signal(1);
-  readonly pan = signal<Point>({ x: 80, y: 80 });
   readonly simulate = signal(false);
   readonly bgImage = signal<string | null>(null);
   readonly bgOpacity = signal(0.5);
 
   // ---- derived state ----------------------------------------------------
-  readonly selectedComponent = computed(() => this.components().find((c) => c.id === this.selectedId()) ?? null);
+  readonly selectedComponent = computed(() => this.components().find((c) => c.id === this.editor.singleComponentId()) ?? null);
   readonly circuitCount = computed(() => new Set(this.wires().map((w) => w.circuit)).size);
   readonly wallLengthMeters = computed(() => this.walls().reduce((s, w) => s + distance({ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 }), 0));
   readonly wireLengthMeters = computed(() => {
@@ -50,16 +58,6 @@ export class ProjectStore {
       const b = comps.find((c) => c.id === w.b);
       return a && b ? sum + wireLengthMeters(a, b) + 0.3 : sum; // +30cm slack for the vertical drop
     }, 0);
-  });
-
-  /** Plan coordinates (metres) at the centre of the visible canvas; where tapped components are placed. */
-  readonly viewCenter = computed<Point>(() => {
-    const z = this.zoom();
-    const pan = this.pan();
-    return {
-      x: (VIEW_CENTER.x - pan.x) / z / this.scalePxPerMeter,
-      y: (VIEW_CENTER.y - pan.y) / z / this.scalePxPerMeter,
-    };
   });
 
   // ---- undo/redo ----------------------------------------------------------
@@ -124,16 +122,8 @@ export class ProjectStore {
   }
 
   // ---------------------------------------------------------------------
-  // Selection / tool / view
+  // View
   // ---------------------------------------------------------------------
-  selectComponent(id: string | null): void {
-    this.selectedId.set(id);
-  }
-
-  setTool(tool: Tool): void {
-    this.tool.set(tool);
-  }
-
   setView(view: ViewMode): void {
     this.view.set(view);
   }
@@ -145,64 +135,97 @@ export class ProjectStore {
   // ---------------------------------------------------------------------
   // Components
   // ---------------------------------------------------------------------
-  addComponentAt(typeId: string, x: number, y: number): ComponentInstance {
+  addComponentAt(typeId: string, x: number, y: number, opts: PlaceOptions = {}): ComponentInstance {
     const type = typeById(typeId);
     const snap = findWallSnap({ x, y }, this.walls());
     const clear = avoidOverlap(snap ?? { x, y }, this.components());
     const circuits = new Set(this.wires().map((w) => w.circuit));
-    const nextCircuit = circuits.size ? Math.max(...circuits) : 1;
     const c: ComponentInstance = {
       id: this.ids.next('comp'),
       type: typeId,
       x: clear.x,
       y: clear.y,
-      rot: snap?.rotDeg ?? 0,
-      circuit: nextCircuit,
+      rot: snap?.rotDeg ?? opts.rotDeg ?? 0,
+      circuit: opts.circuit ?? (circuits.size ? Math.max(...circuits) : 1),
       label: type.label,
       notes: '',
+      ...(opts.mountHeightMm != null ? { mountHeightMm: opts.mountHeightMm } : {}),
     };
     this.pushHistory();
     this.components.update((list) => [...list, c]);
-    this.selectComponent(c.id);
+    this.editor.selectOne('component', c.id);
     return c;
   }
 
-  /** Live position update while dragging — no history entry (caller commits history separately). */
+  /** Live move while dragging — no history entry (caller commits history separately). */
   moveComponentLive(id: string, x: number, y: number, rotDeg?: number): void {
     this.components.update((list) =>
       list.map((c) => (c.id === id ? { ...c, x, y, ...(rotDeg !== undefined ? { rot: rotDeg } : {}) } : c)),
     );
   }
 
-  /** Snaps the dragged component clear of overlaps and finalizes the move against a pre-drag snapshot. */
-  commitComponentDrag(id: string, preDragSnapshot: string): void {
-    const c = this.components().find((x) => x.id === id);
-    if (!c) return;
-    const clear = avoidOverlap(c, this.components(), c.id);
-    this.components.update((list) => list.map((x) => (x.id === id ? { ...x, ...clear } : x)));
+  /** Live position of many components at once, e.g. a group drag. */
+  setComponentPositionsLive(positions: ReadonlyMap<string, Point>): void {
+    this.components.update((list) =>
+      list.map((c) => {
+        const p = positions.get(c.id);
+        return p ? { ...c, x: p.x, y: p.y } : c;
+      }),
+    );
+  }
+
+  /** Snaps a single dragged component clear of overlaps and finalizes the move against a pre-drag snapshot. */
+  commitComponentDrag(ids: readonly string[], preDragSnapshot: string): void {
+    if (ids.length === 1) {
+      const c = this.components().find((x) => x.id === ids[0]);
+      if (c) {
+        const clear = avoidOverlap(c, this.components(), c.id);
+        this.components.update((list) => list.map((x) => (x.id === c.id ? { ...x, ...clear } : x)));
+      }
+    }
     this.pushHistory(preDragSnapshot);
   }
 
-  updateComponent(id: string, patch: Partial<ComponentInstance>): void {
+  /** Patches components as ONE undo step. */
+  updateComponents(ids: readonly string[], patch: Partial<ComponentInstance>): void {
+    if (!ids.length) return;
+    const set = new Set(ids);
     this.pushHistory();
-    this.components.update((list) => list.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+    this.components.update((list) => list.map((c) => (set.has(c.id) ? { ...c, ...patch } : c)));
   }
 
-  deleteSelected(): void {
-    const id = this.selectedId();
-    if (!id) return;
+  updateComponent(id: string, patch: Partial<ComponentInstance>): void {
+    this.updateComponents([id], patch);
+  }
+
+  /** Removes the referenced elements (and anything that depends on them) as ONE undo step. */
+  deleteElements(refs: readonly ElementRef[]): void {
+    if (!refs.length) return;
     this.pushHistory();
-    this.wires.update((list) => list.filter((w) => w.a !== id && w.b !== id));
-    this.components.update((list) => list.filter((c) => c.id !== id));
-    this.selectedId.set(null);
+    const next = removeElements(
+      { walls: this.walls(), rooms: this.rooms(), components: this.components(), wires: this.wires() },
+      refs,
+    );
+    this.walls.set([...next.walls]);
+    this.rooms.set([...next.rooms]);
+    this.components.set([...next.components]);
+    this.wires.set([...next.wires]);
+    const gone = new Set(refs.map((r) => `${r.kind}:${r.id}`));
+    this.editor.setSelection(this.editor.selection().filter((r) => !gone.has(`${r.kind}:${r.id}`)));
+  }
+
+  deleteSelection(): void {
+    this.deleteElements(this.editor.selection());
   }
 
   // ---------------------------------------------------------------------
   // Walls / rooms
   // ---------------------------------------------------------------------
   /** Commits a drafted wall chain. If it closes back on its own start with 3+ segments, registers a room too. */
-  commitWallChain(points: readonly Point[]): void {
-    if (points.length < 2) return;
+  commitWallChain(points: readonly Point[], dims: WallDims = this.defaultWallDims()): void {
+    const pts = points.filter((p, i) => i === 0 || distance(p, points[i - 1]) > 1e-6);
+    if (pts.length < 2) return;
+    points = pts;
     this.pushHistory();
     const newWalls: Wall[] = [];
     for (let i = 0; i < points.length - 1; i++) {
@@ -212,8 +235,8 @@ export class ProjectStore {
         y1: points[i].y,
         x2: points[i + 1].x,
         y2: points[i + 1].y,
-        thickness: 0.12,
-        height: 2.7,
+        thicknessMm: dims.thicknessMm,
+        heightMm: dims.heightMm,
       });
     }
     this.walls.update((list) => [...list, ...newWalls]);
@@ -228,7 +251,19 @@ export class ProjectStore {
     }
   }
 
-  addQuickRoom(x1: number, y1: number, x2: number, y2: number): void {
+  /** Patches walls as ONE undo step. */
+  updateWalls(ids: readonly string[], patch: Partial<Pick<Wall, 'thicknessMm' | 'heightMm'>>): void {
+    if (!ids.length) return;
+    const set = new Set(ids);
+    this.pushHistory();
+    this.walls.update((list) => list.map((w) => (set.has(w.id) ? { ...w, ...patch } : w)));
+  }
+
+  private defaultWallDims(): WallDims {
+    return { thicknessMm: this.editor.wallThicknessMm(), heightMm: this.editor.wallHeightMm() };
+  }
+
+  addQuickRoom(x1: number, y1: number, x2: number, y2: number, dims: WallDims = this.defaultWallDims()): void {
     if (Math.abs(x2 - x1) < 0.3 || Math.abs(y2 - y1) < 0.3) return;
     const X1 = Math.min(x1, x2);
     const X2 = Math.max(x1, x2);
@@ -250,8 +285,8 @@ export class ProjectStore {
         y1: corners[i].y,
         x2: corners[i + 1].x,
         y2: corners[i + 1].y,
-        thickness: 0.12,
-        height: 2.7,
+        thicknessMm: dims.thicknessMm,
+        heightMm: dims.heightMm,
       });
     }
     this.walls.update((list) => [...list, ...newWalls]);
@@ -274,12 +309,20 @@ export class ProjectStore {
   // ---------------------------------------------------------------------
   // Wiring
   // ---------------------------------------------------------------------
-  addWire(aId: string, bId: string): void {
+  addWire(aId: string, bId: string, circuit?: number | null): void {
     if (aId === bId) return;
     const a = this.components().find((c) => c.id === aId);
     if (!a) return;
     this.pushHistory();
-    this.wires.update((list) => [...list, { id: this.ids.next('wire'), a: aId, b: bId, circuit: a.circuit }]);
+    this.wires.update((list) => [...list, { id: this.ids.next('wire'), a: aId, b: bId, circuit: circuit ?? a.circuit }]);
+  }
+
+  /** Patches wires as ONE undo step. */
+  updateWires(ids: readonly string[], patch: Partial<Pick<Wire, 'circuit'>>): void {
+    if (!ids.length) return;
+    const set = new Set(ids);
+    this.pushHistory();
+    this.wires.update((list) => list.map((w) => (set.has(w.id) ? { ...w, ...patch } : w)));
   }
 
   // ---------------------------------------------------------------------
@@ -297,17 +340,6 @@ export class ProjectStore {
 
   setBackgroundOpacity(v: number): void {
     this.bgOpacity.set(v);
-  }
-
-  // ---------------------------------------------------------------------
-  // Pan / zoom
-  // ---------------------------------------------------------------------
-  setZoom(z: number): void {
-    this.zoom.set(Math.max(0.25, Math.min(3, z)));
-  }
-
-  setPan(p: Point): void {
-    this.pan.set(p);
   }
 
   // ---------------------------------------------------------------------
@@ -333,21 +365,21 @@ export class ProjectStore {
     this.rooms.set(dto.rooms);
     this.components.set(dto.components);
     this.wires.set(dto.wires);
-    this.selectedId.set(null);
+    this.editor.clearSelection();
   }
 
   // ---------------------------------------------------------------------
   // Demo seed data
   // ---------------------------------------------------------------------
   private loadDemoProject(): void {
-    const wallDefs: Omit<Wall, 'id' | 'thickness' | 'height'>[] = [
+    const wallDefs: Omit<Wall, 'id' | 'thicknessMm' | 'heightMm'>[] = [
       { x1: 0, y1: 0, x2: 4, y2: 0 }, // north
       { x1: 4, y1: 0, x2: 4, y2: 2.1 }, // east upper (window gap 2.1-3.1)
       { x1: 4, y1: 3.1, x2: 4, y2: 5 }, // east lower
       { x1: 4, y1: 5, x2: 1.6, y2: 5 }, // south right (door gap 0-1.6)
       { x1: 0, y1: 5, x2: 0, y2: 0 }, // west
     ];
-    const walls: Wall[] = wallDefs.map((w) => ({ ...w, id: this.ids.next('wall'), thickness: 0.12, height: 2.7 }));
+    const walls: Wall[] = wallDefs.map((w) => ({ ...w, id: this.ids.next('wall'), thicknessMm: WALL_THICKNESS_MM.default, heightMm: WALL_HEIGHT_MM.default }));
     this.walls.set(walls);
     this.rooms.set([{ id: this.ids.next('room'), label: 'Bedroom', wallIds: walls.map((w) => w.id) }]);
 
