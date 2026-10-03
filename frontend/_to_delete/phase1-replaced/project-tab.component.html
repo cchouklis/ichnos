@@ -1,0 +1,94 @@
+<div class="space-y-4">
+  <div class="grid grid-cols-2 gap-2">
+    <div class="rounded-box border border-base-content/10 bg-base-200 p-2.5">
+      <div class="font-mono text-lg font-semibold text-secondary">{{ store.components().length }}</div>
+      <div class="text-[9.5px] uppercase tracking-wide text-base-content/70">Components</div>
+    </div>
+    <div class="rounded-box border border-base-content/10 bg-base-200 p-2.5">
+      <div class="font-mono text-lg font-semibold text-secondary">{{ store.circuitCount() }}</div>
+      <div class="text-[9.5px] uppercase tracking-wide text-base-content/70">Circuits</div>
+    </div>
+    <div class="rounded-box border border-base-content/10 bg-base-200 p-2.5">
+      <div class="font-mono text-lg font-semibold text-secondary">{{ store.wallLengthMeters() | number: '1.1-1' }}m</div>
+      <div class="text-[9.5px] uppercase tracking-wide text-base-content/70">Wall length</div>
+    </div>
+    <div class="rounded-box border border-base-content/10 bg-base-200 p-2.5">
+      <div class="font-mono text-lg font-semibold text-secondary">{{ store.wireLengthMeters() | number: '1.1-1' }}m</div>
+      <div class="text-[9.5px] uppercase tracking-wide text-base-content/70">Est. wire run</div>
+    </div>
+  </div>
+
+  <div>
+    <span class="label-text text-[10.5px] uppercase tracking-wide text-base-content/70 mb-1.5 block">
+      Rooms ({{ store.rooms().length }})
+    </span>
+    @if (store.rooms().length) {
+      <div class="space-y-1.5">
+        @for (room of store.rooms(); track room.id) {
+          <div class="flex items-center gap-1.5">
+            <input
+              type="text"
+              class="input input-sm input-bordered flex-1"
+              [ngModel]="room.label"
+              (ngModelChange)="renameRoom(room, $event)"
+            />
+            <span class="badge badge-ghost font-mono">{{ roomArea(room) | number: '1.1-1' }}m²</span>
+            <button
+              type="button"
+              class="btn btn-square btn-ghost btn-sm text-base-content/70 hover:text-error"
+              title="Remove room fill (keeps walls)"
+              (click)="store.removeRoomFill(room.id)"
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+        }
+      </div>
+    } @else {
+      <div class="rounded-box border border-dashed border-base-content/20 bg-base-200 p-2.5 text-[11px] text-base-content/70">
+        No closed rooms yet. Draw a wall loop back to its start, or use the Quick Room tool.
+      </div>
+    }
+  </div>
+
+  <label class="form-control">
+    <span class="label-text text-[10.5px] uppercase tracking-wide text-base-content/70 mb-1">Underlay opacity</span>
+    <input
+      type="range" min="0" max="1" step="0.05" class="range range-xs range-secondary"
+      [ngModel]="store.bgOpacity()"
+      (ngModelChange)="store.setBackgroundOpacity(+$event)"
+    />
+  </label>
+
+  <div class="rounded-box border border-base-content/10 bg-base-200 p-3 space-y-2.5">
+    <span class="label-text text-[10.5px] uppercase tracking-wide text-base-content/70 block">Backend</span>
+    <input
+      type="text"
+      class="input input-sm input-bordered w-full font-mono text-xs"
+      placeholder="http://localhost:8080/api"
+      [ngModel]="api.baseUrl()"
+      (ngModelChange)="onUrlChange($event)"
+    />
+    <div class="flex items-center gap-2">
+      @switch (api.status()) {
+        @case ('online') { <span class="badge badge-success badge-sm gap-1">● Connected</span> }
+        @case ('offline') { <span class="badge badge-ghost badge-sm">Offline — using local mode</span> }
+        @default { <span class="badge badge-ghost badge-sm">Checking…</span> }
+      }
+    </div>
+    <div class="flex gap-2">
+      <button type="button" class="btn btn-sm flex-1" (click)="save()">Save to server</button>
+      <button type="button" class="btn btn-sm flex-1" (click)="loadLatest()">Load latest</button>
+    </div>
+    @if (saveError) { <p class="text-[11px] text-error">{{ saveError }}</p> }
+    @if (loadError) { <p class="text-[11px] text-error">{{ loadError }}</p> }
+    <p class="text-[11px] text-base-content/70 leading-relaxed">
+      Points at the companion Spring Boot + PostgreSQL API. Falls back to the Export menu when offline.
+    </p>
+  </div>
+
+  <div class="rounded-box border border-dashed border-base-content/20 bg-base-200 p-2.5 text-[11px] leading-relaxed text-base-content/70">
+    Scale is fixed at {{ store.scalePxPerMeter }}px per meter. Wall thickness defaults to 12cm. Wiring uses simplified
+    orthogonal routing, not true obstacle-aware pathfinding.
+  </div>
+</div>

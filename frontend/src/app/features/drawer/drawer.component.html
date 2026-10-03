@@ -1,0 +1,88 @@
+<nav class="flex h-full flex-col bg-base-100" aria-label="Project guide">
+  <div class="flex items-center justify-between gap-2 border-b border-base-content/10 px-3 py-2.5">
+    <div class="min-w-0">
+      <div class="font-display text-sm font-bold">Project guide</div>
+      <div class="text-[11px] text-base-content/70">{{ completedCount() }} of {{ steps.length }} steps complete</div>
+    </div>
+    <button type="button" class="btn btn-ghost btn-square btn-sm" aria-label="Close project guide" title="Close" (click)="layout.toggleDrawer()">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+
+  <div class="min-h-0 flex-1 overflow-y-auto">
+    @if (store.selectedComponent(); as selected) {
+      <section class="border-b border-base-content/10 bg-base-200/60" aria-label="Selected component">
+        <h2 class="px-3 pt-3 text-[10.5px] font-semibold uppercase tracking-wide text-base-content/70">
+          Selected: {{ selected.label }}
+        </h2>
+        <div class="p-3">
+          <cp-properties-tab />
+        </div>
+      </section>
+    }
+
+    <ol>
+      @for (step of steps; track step.id; let i = $index) {
+        <li class="border-b border-base-content/10">
+          <h2>
+            <button
+              type="button"
+              class="flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-base-200 focus-visible:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+              [attr.aria-expanded]="layout.activeStep() === step.id"
+              [attr.aria-controls]="'cp-step-' + step.id"
+              (click)="layout.setStep(step.id)"
+            >
+              <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold" [class]="markerClass(step.id)">
+                @switch (statuses()[step.id]) {
+                  @case ('done') {
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="m5 13 4 4L19 7"/></svg>
+                  }
+                  @case ('attention') {
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="M12 7v6M12 17h.01"/></svg>
+                  }
+                  @default {
+                    {{ i + 1 }}
+                  }
+                }
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block text-sm font-semibold">{{ step.title }}</span>
+                <span class="block text-[11px] text-base-content/70">{{ step.summary }}</span>
+                <span class="sr-only">Status: {{ statusLabel(step.id) }}</span>
+              </span>
+              <svg
+                viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+                class="shrink-0 text-base-content/70 transition-transform"
+                [class.rotate-180]="layout.activeStep() === step.id"
+                aria-hidden="true"
+              ><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+          </h2>
+
+          @if (layout.activeStep() === step.id) {
+            <div [id]="'cp-step-' + step.id" role="region" [attr.aria-label]="step.title" class="px-3 pb-4">
+              @switch (step.id) {
+                @case ('project') { <cp-project-step /> }
+                @case ('rooms') { <cp-rooms-step /> }
+                @case ('structure') { <cp-structure-step /> }
+                @case ('components') { <cp-components-step /> }
+                @case ('wiring') { <cp-wiring-step /> }
+                @case ('review') { <cp-review-step /> }
+              }
+              <div class="mt-4 flex items-center justify-between gap-2">
+                @if (i > 0) {
+                  <button type="button" class="btn btn-ghost btn-sm" (click)="go(-1)">Back</button>
+                } @else {
+                  <span></span>
+                }
+                @if (i < steps.length - 1) {
+                  <button type="button" class="btn btn-primary btn-sm" (click)="go(1)">Next: {{ steps[i + 1].title }}</button>
+                }
+              </div>
+            </div>
+          }
+        </li>
+      }
+    </ol>
+  </div>
+</nav>

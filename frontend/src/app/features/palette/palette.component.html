@@ -1,0 +1,59 @@
+<div class="flex h-full flex-col">
+  <div class="flex items-center justify-between px-3 pt-3 pb-2">
+    <span class="font-display text-xs font-semibold uppercase tracking-wider text-base-content/70">Components</span>
+  </div>
+
+  <div class="flex-1 overflow-y-auto px-2 pb-3 space-y-1.5">
+    @for (group of groups; track group.cat) {
+      <div class="collapse collapse-arrow bg-base-200 border border-base-content/10 rounded-box">
+        <input
+          type="checkbox"
+          [checked]="openCategory() === group.cat"
+          (change)="toggleCategory(group.cat)"
+        />
+        <div class="collapse-title min-h-0 py-2.5 pr-8 flex items-center gap-2 text-sm font-semibold">
+          <span class="h-2 w-2 rounded-full" [style.background]="theme.tint(group.color)"></span>
+          {{ group.label }}
+          <span class="ml-auto font-mono text-[10px] text-base-content/70 mr-1">{{ group.items.length }}</span>
+        </div>
+        <div class="collapse-content">
+          <div class="grid grid-cols-2 gap-1.5 pt-1">
+            @for (item of group.items; track item.id) {
+              <div
+                class="flex flex-col items-center gap-1 rounded-field border border-base-content/10 bg-base-100 px-1 py-2.5 cursor-grab active:cursor-grabbing hover:border-secondary transition-colors select-none touch-none"
+                [style.opacity]="draggingTypeId() === item.id ? 0.35 : 1"
+                role="button"
+                tabindex="0"
+                [attr.aria-label]="'Add ' + item.label + ' to the plan'"
+                (pointerdown)="startDrag($event, item.id)"
+                (click)="place(item.id)"
+                (keydown.enter)="place(item.id)"
+                (keydown.space)="place(item.id); $event.preventDefault()"
+              >
+                <svg width="26" height="26" viewBox="0 0 24 24" [style.color]="theme.tint(item.color)" [innerHTML]="icons.html(item.icon)"></svg>
+                <span class="text-[9.5px] text-center leading-tight text-base-content/70 font-semibold">{{ item.label }}</span>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    }
+  </div>
+
+  <div class="mx-2 mb-3 rounded-box border border-dashed border-base-content/20 bg-base-200 p-2.5 text-[11px] leading-relaxed text-base-content/70">
+    Drag a component onto the plan, or tap it to place it at the centre of the view. It snaps to the nearest wall automatically.
+  </div>
+</div>
+
+@if (draggingTypeId()) {
+  <div
+    class="pointer-events-none fixed z-[999] flex h-11 w-11 items-center justify-center rounded-xl border-2"
+    [style.left.px]="ghostPosition().x - 22"
+    [style.top.px]="ghostPosition().y - 22"
+    [style.border-color]="ghostColor()"
+    [style.background]="ghostColor() + '33'"
+    [style.color]="ghostColor()"
+  >
+    <svg width="24" height="24" viewBox="0 0 24 24" [innerHTML]="icons.html(ghostIcon())"></svg>
+  </div>
+}
