@@ -4,8 +4,10 @@ export interface Wall {
   y1: number;
   x2: number;
   y2: number;
-  thickness: number;
-  height: number;
+  /** Wall thickness in millimetres. */
+  thicknessMm: number;
+  /** Wall height in millimetres. */
+  heightMm: number;
 }
 
 export interface Room {
@@ -25,8 +27,8 @@ export interface ComponentInstance {
   circuit: number;
   label: string;
   notes: string;
-  /** Override for the type's default mount height, in meters. */
-  mountHeight?: number;
+  /** Override for the type's default mount height, in millimetres. */
+  mountHeightMm?: number;
 }
 
 export interface Wire {
@@ -44,14 +46,22 @@ export interface ComponentType {
   cat: ComponentCategory;
   label: string;
   color: string;
-  /** Default mount height in meters. */
-  height: number;
+  /** Default mount height in millimetres. */
+  mountHeightMm: number;
   icon: string;
   volts: number;
   amps: number;
 }
 
-export type Tool = 'select' | 'wall' | 'room' | 'wire' | 'pan';
+export type Tool = 'select' | 'wall' | 'room' | 'wire' | 'component';
+
+export type ElementKind = 'wall' | 'component' | 'wire';
+
+/** Typed reference to a document element. */
+export interface ElementRef {
+  kind: ElementKind;
+  id: string;
+}
 export type ViewMode = '2d' | '3d';
 
 /** Full-document payload — matches ProjectDto on the backend. */

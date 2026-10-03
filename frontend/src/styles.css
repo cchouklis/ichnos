@@ -125,6 +125,26 @@ body {
   stroke-dasharray: 6 5;
   opacity: 0.8;
 }
+.wall-line.selected {
+  stroke: var(--color-secondary);
+}
+.hit-line {
+  fill: none;
+  stroke: transparent;
+  pointer-events: stroke;
+  stroke-linecap: round;
+}
+.marquee {
+  fill: color-mix(in oklab, var(--color-secondary) 14%, transparent);
+  stroke: var(--color-secondary);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.overlay {
+  pointer-events: none;
+}
 .room-fill {
   fill: var(--plan-room-fill);
 }
@@ -146,6 +166,11 @@ body {
   stroke-linecap: round;
   stroke-linejoin: round;
   opacity: 0.85;
+}
+.wire-path.selected {
+  stroke-width: 4;
+  opacity: 1;
+  filter: drop-shadow(0 0 4px color-mix(in oklab, var(--color-secondary) 70%, transparent));
 }
 .wire-path.energized {
   stroke-dasharray: 6 5;

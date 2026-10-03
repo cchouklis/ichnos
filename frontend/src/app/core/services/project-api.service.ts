@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom, timeout } from 'rxjs';
+import { ProjectWire, fromWire, toWire } from './project-api.adapter';
 import { BackendStatus, ProjectDto, ProjectSummaryDto } from '../models';
 
 @Injectable({ providedIn: 'root' })
@@ -29,15 +30,15 @@ export class ProjectApiService {
   }
 
   async get(id: string): Promise<ProjectDto> {
-    return firstValueFrom(this.http.get<ProjectDto>(this.url(`/projects/${id}`)));
+    return fromWire(await firstValueFrom(this.http.get<ProjectWire>(this.url(`/projects/${id}`))));
   }
 
   async create(dto: ProjectDto): Promise<ProjectDto> {
-    return firstValueFrom(this.http.post<ProjectDto>(this.url('/projects'), dto));
+    return fromWire(await firstValueFrom(this.http.post<ProjectWire>(this.url('/projects'), toWire(dto))));
   }
 
   async update(id: string, dto: ProjectDto): Promise<ProjectDto> {
-    return firstValueFrom(this.http.put<ProjectDto>(this.url(`/projects/${id}`), dto));
+    return fromWire(await firstValueFrom(this.http.put<ProjectWire>(this.url(`/projects/${id}`), toWire(dto))));
   }
 
   /** Saves — creates on first save, updates thereafter, based on whether the dto already carries a server id. */

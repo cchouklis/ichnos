@@ -9,20 +9,20 @@ export const CATEGORY_META: Record<ComponentCategory, { label: string; color: st
 };
 
 export const COMPONENT_TYPES: ComponentType[] = [
-  { id: 'outlet-single', cat: 'outlets', label: 'Single Outlet', color: '#ffb020', height: 0.3, icon: 'outlet1', volts: 120, amps: 15 },
-  { id: 'outlet-duplex', cat: 'outlets', label: 'Duplex Outlet', color: '#ffb020', height: 0.3, icon: 'outlet2', volts: 120, amps: 15 },
-  { id: 'outlet-gfci', cat: 'outlets', label: 'GFCI Outlet', color: '#ffb020', height: 0.3, icon: 'outletGfci', volts: 120, amps: 20 },
-  { id: 'outlet-usb', cat: 'outlets', label: 'USB Outlet', color: '#ffb020', height: 0.3, icon: 'outletUsb', volts: 120, amps: 15 },
-  { id: 'outlet-220', cat: 'outlets', label: '220V Outlet', color: '#ff5470', height: 0.3, icon: 'outlet220', volts: 220, amps: 30 },
-  { id: 'switch-single', cat: 'switches', label: 'Single-Pole Switch', color: '#4fd1ff', height: 1.2, icon: 'switch1', volts: 120, amps: 15 },
-  { id: 'switch-3way', cat: 'switches', label: '3-Way Switch', color: '#4fd1ff', height: 1.2, icon: 'switch3', volts: 120, amps: 15 },
-  { id: 'switch-dimmer', cat: 'switches', label: 'Dimmer Switch', color: '#4fd1ff', height: 1.2, icon: 'dimmer', volts: 120, amps: 10 },
-  { id: 'light-ceiling', cat: 'lighting', label: 'Ceiling Light', color: '#ffe27a', height: 2.7, icon: 'ceilingLight', volts: 120, amps: 2 },
-  { id: 'light-recessed', cat: 'lighting', label: 'Recessed Light', color: '#ffe27a', height: 2.7, icon: 'recessed', volts: 120, amps: 1 },
-  { id: 'light-sconce', cat: 'lighting', label: 'Wall Sconce', color: '#ffe27a', height: 1.8, icon: 'sconce', volts: 120, amps: 1 },
-  { id: 'light-pendant', cat: 'lighting', label: 'Pendant Light', color: '#ffe27a', height: 2.4, icon: 'pendant', volts: 120, amps: 2 },
-  { id: 'panel', cat: 'distribution', label: 'Electrical Panel', color: '#ff5470', height: 1.5, icon: 'panel', volts: 240, amps: 200 },
-  { id: 'junction', cat: 'boxes', label: 'Junction Box', color: '#8fa3c4', height: 2.4, icon: 'junction', volts: 120, amps: 20 },
+  { id: 'outlet-single', cat: 'outlets', label: 'Single Outlet', color: '#ffb020', mountHeightMm: 300, icon: 'outlet1', volts: 120, amps: 15 },
+  { id: 'outlet-duplex', cat: 'outlets', label: 'Duplex Outlet', color: '#ffb020', mountHeightMm: 300, icon: 'outlet2', volts: 120, amps: 15 },
+  { id: 'outlet-gfci', cat: 'outlets', label: 'GFCI Outlet', color: '#ffb020', mountHeightMm: 300, icon: 'outletGfci', volts: 120, amps: 20 },
+  { id: 'outlet-usb', cat: 'outlets', label: 'USB Outlet', color: '#ffb020', mountHeightMm: 300, icon: 'outletUsb', volts: 120, amps: 15 },
+  { id: 'outlet-220', cat: 'outlets', label: '220V Outlet', color: '#ff5470', mountHeightMm: 300, icon: 'outlet220', volts: 220, amps: 30 },
+  { id: 'switch-single', cat: 'switches', label: 'Single-Pole Switch', color: '#4fd1ff', mountHeightMm: 1200, icon: 'switch1', volts: 120, amps: 15 },
+  { id: 'switch-3way', cat: 'switches', label: '3-Way Switch', color: '#4fd1ff', mountHeightMm: 1200, icon: 'switch3', volts: 120, amps: 15 },
+  { id: 'switch-dimmer', cat: 'switches', label: 'Dimmer Switch', color: '#4fd1ff', mountHeightMm: 1200, icon: 'dimmer', volts: 120, amps: 10 },
+  { id: 'light-ceiling', cat: 'lighting', label: 'Ceiling Light', color: '#ffe27a', mountHeightMm: 2700, icon: 'ceilingLight', volts: 120, amps: 2 },
+  { id: 'light-recessed', cat: 'lighting', label: 'Recessed Light', color: '#ffe27a', mountHeightMm: 2700, icon: 'recessed', volts: 120, amps: 1 },
+  { id: 'light-sconce', cat: 'lighting', label: 'Wall Sconce', color: '#ffe27a', mountHeightMm: 1800, icon: 'sconce', volts: 120, amps: 1 },
+  { id: 'light-pendant', cat: 'lighting', label: 'Pendant Light', color: '#ffe27a', mountHeightMm: 2400, icon: 'pendant', volts: 120, amps: 2 },
+  { id: 'panel', cat: 'distribution', label: 'Electrical Panel', color: '#ff5470', mountHeightMm: 1500, icon: 'panel', volts: 240, amps: 200 },
+  { id: 'junction', cat: 'boxes', label: 'Junction Box', color: '#8fa3c4', mountHeightMm: 2400, icon: 'junction', volts: 120, amps: 20 },
 ];
 
 const TYPE_INDEX: ReadonlyMap<string, ComponentType> = new Map(COMPONENT_TYPES.map((t) => [t.id, t]));

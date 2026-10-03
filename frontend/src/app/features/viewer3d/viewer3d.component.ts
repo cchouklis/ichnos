@@ -1,6 +1,7 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, ViewChild, effect, inject } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { mmToMeters } from '../../core/units/units.util';
 import { ProjectStore } from '../../core/state/project-store.service';
 import { typeById } from '../../core/data/component-types.data';
 import { wireWaypoints } from '../../core/util/geometry.util';
@@ -127,8 +128,8 @@ export class Viewer3dComponent implements AfterViewInit, OnDestroy {
     for (const w of this.store.walls()) {
       const len = Math.hypot(w.x2 - w.x1, w.y2 - w.y1);
       if (len < 0.01) continue;
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(len, w.height, w.thickness), wallMat);
-      mesh.position.set((w.x1 + w.x2) / 2, w.height / 2, (w.y1 + w.y2) / 2);
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(len, mmToMeters(w.heightMm), mmToMeters(w.thicknessMm)), wallMat);
+      mesh.position.set((w.x1 + w.x2) / 2, mmToMeters(w.heightMm) / 2, (w.y1 + w.y2) / 2);
       mesh.rotation.y = -Math.atan2(w.y2 - w.y1, w.x2 - w.x1);
       this.wallGroup.add(mesh);
     }
@@ -136,7 +137,7 @@ export class Viewer3dComponent implements AfterViewInit, OnDestroy {
     for (const c of this.store.components()) {
       const t = typeById(c.type);
       const mesh = this.buildComponentMesh(t.cat, t.color);
-      mesh.position.set(c.x, c.mountHeight ?? t.height, c.y);
+      mesh.position.set(c.x, mmToMeters(c.mountHeightMm ?? t.mountHeightMm), c.y);
       mesh.rotation.y = -((c.rot || 0) * Math.PI) / 180;
       mesh.userData['baseColor'] = t.color;
       this.compGroup.add(mesh);
@@ -147,8 +148,8 @@ export class Viewer3dComponent implements AfterViewInit, OnDestroy {
       const a = comps.find((c) => c.id === w.a);
       const b = comps.find((c) => c.id === w.b);
       if (!a || !b) continue;
-      const ha = a.mountHeight ?? typeById(a.type).height;
-      const hb = b.mountHeight ?? typeById(b.type).height;
+      const ha = mmToMeters(a.mountHeightMm ?? typeById(a.type).mountHeightMm);
+      const hb = mmToMeters(b.mountHeightMm ?? typeById(b.type).mountHeightMm);
       const waypoints = wireWaypoints(a, b);
       const riseY = Math.max(ha, hb) + 0.15;
       const pts = [

@@ -1,1 +1,35 @@
+# ---------------------------------------------------------------------------
+# Secrets and local environment. Commit an .env.example instead of real values.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+
+# docker-compose.yml currently holds the database password in plain text, so it stays
+# ignored. Phase 6 moves credentials into .env and commits a clean compose file; remove
+# this line then.
 /docker-compose.yml
+
+# ---------------------------------------------------------------------------
+# IDEs, OS and tooling
+# ---------------------------------------------------------------------------
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.iml
+.DS_Store
+Thumbs.db
+.claude/settings.local.json
+
+# ---------------------------------------------------------------------------
+# Logs and scratch files
+# ---------------------------------------------------------------------------
+*.log
+*.tmp
+*.bak
+*.swp

@@ -20,7 +20,10 @@
           <div class="grid grid-cols-2 gap-1.5 pt-1">
             @for (item of group.items; track item.id) {
               <div
-                class="flex flex-col items-center gap-1 rounded-field border border-base-content/10 bg-base-100 px-1 py-2.5 cursor-grab active:cursor-grabbing hover:border-secondary transition-colors select-none touch-none"
+                class="flex flex-col items-center gap-1 rounded-field border border-base-content/10 bg-base-100 px-1 py-2.5 cursor-grab active:cursor-grabbing hover:border-secondary hover:-translate-y-0.5 hover:shadow transition select-none touch-none"
+                [class.border-secondary]="editor.armedType() === item.id"
+                [class.ring-2]="editor.armedType() === item.id"
+                [class.ring-secondary]="editor.armedType() === item.id"
                 [style.opacity]="draggingTypeId() === item.id ? 0.35 : 1"
                 role="button"
                 tabindex="0"
@@ -41,7 +44,7 @@
   </div>
 
   <div class="mx-2 mb-3 rounded-box border border-dashed border-base-content/20 bg-base-200 p-2.5 text-[11px] leading-relaxed text-base-content/70">
-    Drag a component onto the plan, or tap it to place it at the centre of the view. It snaps to the nearest wall automatically.
+    Tap a component, then click the plan to place it (keep clicking to place more, Esc to stop), or drag it onto the plan. It snaps to the nearest wall automatically.
   </div>
 </div>
 
