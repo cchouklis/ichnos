@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { ComplianceIssue } from '../../core/models';
 import { ComplianceService } from '../../core/services/compliance.service';
-import { ProjectStore } from '../../core/state/project-store.service';
+import { EditorStore } from '../../core/state/editor.store';
 
 @Component({
   selector: 'cp-checks-tab',
@@ -42,14 +42,15 @@ import { ProjectStore } from '../../core/state/project-store.service';
 })
 export class ChecksTabComponent {
   readonly compliance = inject(ComplianceService);
-  private readonly store = inject(ProjectStore);
+  private readonly editor = inject(EditorStore);
 
   focus(issue: ComplianceIssue): void {
-    if (issue.focus.type === 'component') {
-      this.store.selectComponent(String(issue.focus.id));
+    const id = String(issue.focus.id);
+    this.editor.setTool('select');
+    if (issue.focus.type === 'component' || issue.focus.type === 'wall') {
+      this.editor.selectOne(issue.focus.type, id);
     } else {
-      this.store.selectComponent(null);
-      this.store.setTool('select');
+      this.editor.clearSelection();
     }
   }
 }

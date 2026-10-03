@@ -5,7 +5,7 @@ import { ComponentCategory, ComponentType } from '../../core/models';
 import { DragDropService } from '../../core/services/drag-drop.service';
 import { IconRegistryService } from '../../core/services/icon-registry.service';
 import { LayoutStore } from '../../core/state/layout.store';
-import { ProjectStore } from '../../core/state/project-store.service';
+import { EditorStore } from '../../core/state/editor.store';
 import { ThemeService } from '../../core/theme/theme.service';
 
 interface CategoryGroup {
@@ -39,7 +39,7 @@ export class PaletteComponent {
   private readonly dragDrop = inject(DragDropService);
   readonly icons = inject(IconRegistryService);
   readonly theme = inject(ThemeService);
-  private readonly store = inject(ProjectStore);
+  readonly editor = inject(EditorStore);
   private readonly layout = inject(LayoutStore);
 
   readonly groups: CategoryGroup[] = buildGroups();
@@ -54,10 +54,9 @@ export class PaletteComponent {
     this.dragDrop.start(typeId, e.clientX, e.clientY);
   }
 
-  /** Tap or Enter places the component at the centre of the visible plan; dragging still places it exactly where you drop it. */
+  /** Tap or Enter arms the type for placement: every click on the plan then places one. Dragging still drops exactly where you release. */
   place(typeId: string): void {
-    const c = this.store.viewCenter();
-    this.store.addComponentAt(typeId, c.x, c.y);
+    this.editor.armComponent(typeId);
     this.layout.closeOverlay();
   }
 

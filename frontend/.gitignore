@@ -1,0 +1,39 @@
+# compiled output
+/dist
+/tmp
+/out-tsc
+/.angular
+
+# dependencies
+/node_modules
+
+# IDEs
+.idea
+.vscode/*
+!.vscode/extensions.json
+*.iml
+
+# test output
+/coverage
+*.tsbuildinfo
+
+# package manager logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# misc
+.DS_Store
+Thumbs.db
+*.log
+
+# local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.gitkeep
+# scratch folders (kept from the original file)
+_*_*
+_*

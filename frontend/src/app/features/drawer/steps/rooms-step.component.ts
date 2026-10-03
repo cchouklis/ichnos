@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Room } from '../../../core/models';
+import { EditorStore } from '../../../core/state/editor.store';
 import { ProjectStore } from '../../../core/state/project-store.service';
 import { shoelaceArea } from '../../../core/util/geometry.util';
 
@@ -48,14 +49,15 @@ import { shoelaceArea } from '../../../core/util/geometry.util';
       <button
         type="button"
         class="btn btn-sm w-full"
-        [class.btn-primary]="store.tool() === 'room'"
-        (click)="store.setTool('room')"
+        [class.btn-primary]="editor.tool() === 'room'"
+        (click)="editor.setTool('room')"
       >Quick room: drag a rectangle on the plan</button>
     </div>
   `,
 })
 export class RoomsStepComponent {
   readonly store = inject(ProjectStore);
+  readonly editor = inject(EditorStore);
 
   roomArea(room: Room): number {
     const walls = room.wallIds

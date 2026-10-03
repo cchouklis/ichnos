@@ -1,13 +1,15 @@
-<div class="relative h-full w-full bg-base-200 overflow-hidden">
+<div class="relative h-full w-full select-none overflow-hidden bg-base-200">
   <svg
     #svgRef
     viewBox="0 0 900 700"
     preserveAspectRatio="xMidYMid meet"
     class="block h-full w-full"
+    [class]="cursorClass()"
     [style.touch-action]="'none'"
-    [class.cursor-crosshair]="store.tool() === 'wall' || store.tool() === 'room' || store.tool() === 'wire'"
-    [class.cursor-grab]="store.tool() === 'pan'"
+    role="application"
+    aria-label="Floor plan editor"
     (pointerdown)="onSvgPointerDown($event)"
+    (contextmenu)="onContextMenu($event)"
     (dblclick)="onSvgDoubleClick()"
   >
     <defs>
@@ -48,7 +50,15 @@
             [attr.x1]="w.x1 * PX" [attr.y1]="w.y1 * PX"
             [attr.x2]="w.x2 * PX" [attr.y2]="w.y2 * PX"
             class="wall-line"
+            [class.selected]="isSelected('wall', w.id)"
             [attr.stroke-width]="wallStrokeWidth(w)"
+          ></line>
+          <line
+            [attr.x1]="w.x1 * PX" [attr.y1]="w.y1 * PX"
+            [attr.x2]="w.x2 * PX" [attr.y2]="w.y2 * PX"
+            class="hit-line"
+            data-el-kind="wall" [attr.data-el-id]="w.id"
+            [attr.stroke-width]="Math.max(hitWidth(), wallStrokeWidth(w))"
           ></line>
         }
       </g>
@@ -60,7 +70,14 @@
             [attr.d]="wireD(wire)"
             class="wire-path"
             [class.energized]="store.simulate()"
+            [class.selected]="isSelected('wire', wire.id)"
             [attr.stroke]="wireColor(wire.circuit)"
+          ></path>
+          <path
+            [attr.d]="wireD(wire)"
+            class="hit-line"
+            data-el-kind="wire" [attr.data-el-id]="wire.id"
+            [attr.stroke-width]="hitWidth()"
           ></path>
         }
       </g>
@@ -70,8 +87,9 @@
         @for (c of store.components(); track c.id) {
           <g
             class="comp-group"
-            [class.selected]="isSelected(c.id)"
-            [attr.data-comp-id]="c.id"
+            [class.selected]="isSelected('component', c.id)"
+            data-el-kind="component"
+            [attr.data-el-id]="c.id"
             [attr.transform]="compTransform(c)"
           >
             <rect class="comp-hit" x="-17" y="-17" width="34" height="34"></rect>
@@ -93,96 +111,103 @@
       </g>
 
       <!-- draft overlays -->
-      <g>
+      <g class="overlay">
         @for (seg of wallDraftLines(); track $index) {
           <line
             [attr.x1]="seg.p1.x * PX" [attr.y1]="seg.p1.y * PX"
             [attr.x2]="seg.p2.x * PX" [attr.y2]="seg.p2.y * PX"
-            class="wall-line preview" stroke-width="4"
+            class="wall-line preview" [attr.stroke-width]="strokeWidthForMm(editor.wallThicknessMm())"
           ></line>
         }
-        @if (roomDraftPreview(); as r) {
+        @if (roomTool.draft(); as r) {
           <rect
             [attr.x]="Math.min(r.x1, r.x2) * PX" [attr.y]="Math.min(r.y1, r.y2) * PX"
             [attr.width]="Math.abs(r.x2 - r.x1) * PX" [attr.height]="Math.abs(r.y2 - r.y1) * PX"
             class="draft-stroke"
           ></rect>
         }
-        @if (wireDraftPreview(); as wd) {
+        @if (wireTool.draftLine(); as wd) {
           <path
             [attr.d]="'M ' + wd.from.x * PX + ' ' + wd.from.y * PX + ' L ' + wd.to.x * PX + ' ' + wd.to.y * PX"
             class="draft-stroke"
           ></path>
         }
+        @if (editor.tool() === 'component' && componentTool.ghost(); as g) {
+          <circle [attr.cx]="g.x * PX" [attr.cy]="g.y * PX" r="16" class="draft-stroke"></circle>
+        }
+        @if (marquee(); as m) {
+          <rect
+            [attr.x]="Math.min(m.x1, m.x2) * PX" [attr.y]="Math.min(m.y1, m.y2) * PX"
+            [attr.width]="Math.abs(m.x2 - m.x1) * PX" [attr.height]="Math.abs(m.y2 - m.y1) * PX"
+            class="marquee"
+          ></rect>
+        }
       </g>
     </g>
   </svg>
 
-  <!-- floating tool dock -->
-  <div class="absolute left-2 top-2 z-10 join join-vertical md:join-horizontal bg-base-100/90 backdrop-blur rounded-box border border-base-content/10 p-1 shadow-lg">
-    <button
-      type="button"
-      class="btn btn-square btn-sm join-item"
-      [class.btn-primary]="store.tool() === 'select'"
-      [class.btn-ghost]="store.tool() !== 'select'"
-      title="Select / Move (V)"
-      (click)="setTool('select')"
-    >
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 4 7.07 17 2.51-7.39L21 11.07z"/></svg>
-    </button>
-    <button
-      type="button"
-      class="btn btn-square btn-sm join-item hidden md:inline-flex"
-      [class.btn-primary]="store.tool() === 'wall'"
-      [class.btn-ghost]="store.tool() !== 'wall'"
-      title="Draw Wall (W)"
-      (click)="setTool('wall')"
-    >
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 20 4"/><path d="M4 4v4M4 4h4M20 20v-4M20 20h-4"/></svg>
-    </button>
-    <button
-      type="button"
-      class="btn btn-square btn-sm join-item"
-      [class.btn-primary]="store.tool() === 'room'"
-      [class.btn-ghost]="store.tool() !== 'room'"
-      title="Quick Room (R)"
-      (click)="setTool('room')"
-    >
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="5" width="16" height="14" rx="1"/></svg>
-    </button>
-    <button
-      type="button"
-      class="btn btn-square btn-sm join-item hidden md:inline-flex"
-      [class.btn-primary]="store.tool() === 'wire'"
-      [class.btn-ghost]="store.tool() !== 'wire'"
-      title="Wire Tool (C)"
-      (click)="setTool('wire')"
-    >
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M8 8c3 0 5 8 8 8"/></svg>
-    </button>
-    <button
-      type="button"
-      class="btn btn-square btn-sm join-item"
-      [class.btn-primary]="store.tool() === 'pan'"
-      [class.btn-ghost]="store.tool() !== 'pan'"
-      title="Pan (Space)"
-      (click)="setTool('pan')"
-    >
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11V6a1.5 1.5 0 0 1 3 0v5"/><path d="M12 10.5V5a1.5 1.5 0 0 1 3 0v6"/><path d="M15 11V7a1.5 1.5 0 0 1 3 0v7c0 3.5-2 6-5.5 6h-2C7.5 20 6 18 5 16l-1.5-3c-.4-1 .3-2 1.3-1.8.5.1.9.5 1.2 1l1 1.8"/></svg>
-    </button>
+  <!-- floating tool dock (desktop/tablet; phones use the bottom navigation) -->
+  <div class="absolute left-2 top-2 z-10 hidden items-center gap-0.5 rounded-box border border-base-content/10 bg-base-100/90 p-1 shadow-lg backdrop-blur md:flex">
+      <cp-tool-button label="Select / Move" description="Click to select, Shift+click to add. Drag a component to move it, drag empty space to box-select." shortcut="V" side="bottom" [toggle]="true" [active]="editor.tool() === 'select'" (pressed)="setTool('select')" >
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m4 4 7.07 17 2.51-7.39L21 11.07z"/></svg>
+      </cp-tool-button>
+      <cp-tool-button label="Draw walls" description="Click to add points, double-click or Enter to finish. Right-click deletes a wall; Ctrl+drag selects walls." shortcut="W" side="bottom" [toggle]="true" [active]="editor.tool() === 'wall'" (pressed)="setTool('wall')" >
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 20 20 4"/><path d="M4 4v4M4 4h4M20 20v-4M20 20h-4"/></svg>
+      </cp-tool-button>
+      <cp-tool-button label="Quick room" description="Drag a rectangle to create four walls and a room in one step." shortcut="R" side="bottom" [toggle]="true" [active]="editor.tool() === 'room'" (pressed)="setTool('room')" >
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="1"/></svg>
+      </cp-tool-button>
+      <cp-tool-button label="Place components" description="Click the plan to place the chosen component; it snaps to walls. Right-click deletes. Esc stops placing." shortcut="P" side="bottom" [toggle]="true" [active]="editor.tool() === 'component'" (pressed)="openComponentTool()" >
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="3"/><circle cx="12" cy="9" r="1.6"/><path d="M9.5 15h5"/></svg>
+      </cp-tool-button>
+      <cp-tool-button label="Wire components" description="Click one component, then another, to connect them. Right-click deletes a wire." shortcut="C" side="bottom" [toggle]="true" [active]="editor.tool() === 'wire'" (pressed)="setTool('wire')" >
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M8 8c3 0 5 8 8 8"/></svg>
+      </cp-tool-button>
+  </div>
+
+  <!-- touch interaction mode: what a tap does (mouse users have right-click and Ctrl+drag instead) -->
+  <div
+    class="absolute left-2 top-2 z-10 flex md:hidden pointer-coarse:flex items-center gap-0.5 rounded-box border border-base-content/10 bg-base-100/90 p-1 shadow-lg backdrop-blur md:left-auto md:right-2"
+    role="group" aria-label="Touch mode"
+  >
+    @for (m of modes; track m.id) {
+      <button
+        type="button"
+        class="btn btn-sm"
+        [class.btn-primary]="editor.mode() === m.id"
+        [class.btn-ghost]="editor.mode() !== m.id"
+        [attr.aria-pressed]="editor.mode() === m.id"
+        [attr.title]="m.description"
+        (click)="setMode(m.id)"
+      >{{ m.label }}</button>
+    }
+  </div>
+
+  <!-- contextual tool options -->
+  <div class="pointer-events-none absolute inset-x-2 bottom-12 z-10 md:inset-x-auto md:right-2 md:top-14 md:bottom-auto">
+    <div class="pointer-events-auto">
+      <cp-tool-panel />
+    </div>
+  </div>
+
+  <!-- status hint -->
+  <div class="pointer-events-none absolute bottom-2 left-2 right-16 z-10 hidden sm:block">
+    <p class="inline-block max-w-full rounded-box border border-base-content/10 bg-base-100/90 px-2.5 py-1 text-[11px] leading-snug text-base-content/80 shadow backdrop-blur" role="status">
+      {{ hint() }}<span class="ml-2 text-base-content/60">· Pan: middle-drag or Space+drag · Zoom: wheel</span>
+    </p>
   </div>
 
   <!-- zoom controls -->
-  <div class="absolute right-2 bottom-2 z-10 join join-vertical bg-base-100/90 backdrop-blur rounded-box border border-base-content/10 p-1 shadow-lg">
-    <button type="button" class="btn btn-square btn-sm btn-ghost join-item" title="Zoom in" (click)="zoomIn()">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg>
-    </button>
-    <div class="text-center font-mono text-[9.5px] text-base-content/70 py-0.5">{{ (store.zoom() * 100) | number: '1.0-0' }}%</div>
-    <button type="button" class="btn btn-square btn-sm btn-ghost join-item" title="Zoom out" (click)="zoomOut()">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M8 11h6"/></svg>
-    </button>
-    <button type="button" class="btn btn-square btn-sm btn-ghost join-item" title="Fit to view" (click)="fitToView()">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/></svg>
-    </button>
+  <div class="absolute bottom-2 right-2 z-10 flex flex-col items-center gap-0.5 rounded-box border border-base-content/10 bg-base-100/90 p-1 shadow-lg backdrop-blur">
+      <cp-tool-button label="Zoom in" description="Magnify the plan. The mouse wheel works too." shortcut="" side="left" [active]="false" (pressed)="zoomIn()" >
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg>
+      </cp-tool-button>
+    <div class="py-0.5 text-center font-mono text-[9.5px] text-base-content/70" aria-live="polite">{{ (editor.zoom() * 100) | number: '1.0-0' }}%</div>
+      <cp-tool-button label="Zoom out" description="Shrink the plan to see more." shortcut="" side="left" [active]="false" (pressed)="zoomOut()" >
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M8 11h6"/></svg>
+      </cp-tool-button>
+      <cp-tool-button label="Fit to view" description="Centre and scale the plan so every wall is visible." shortcut="" side="left" [active]="false" (pressed)="fitToView()" >
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/></svg>
+      </cp-tool-button>
   </div>
 </div>

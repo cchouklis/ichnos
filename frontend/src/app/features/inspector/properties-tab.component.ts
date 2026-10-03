@@ -51,11 +51,11 @@ import { ThemeService } from '../../core/theme/theme.service';
             />
           </label>
           <label class="flex flex-col">
-            <span class="text-[10.5px] uppercase tracking-wide text-base-content/70 mb-1">Mount ht (m)</span>
+            <span class="text-[10.5px] uppercase tracking-wide text-base-content/70 mb-1">Mount ht (mm)</span>
             <input
-              type="number" step="0.1" class="input input-sm"
-              [ngModel]="c.mountHeight ?? typeOf(c.type).height"
-              (ngModelChange)="store.updateComponent(c.id, { mountHeight: +$event })"
+              type="number" step="10" min="0" max="10000" class="input input-sm"
+              [ngModel]="c.mountHeightMm ?? typeOf(c.type).mountHeightMm"
+              (ngModelChange)="store.updateComponent(c.id, { mountHeightMm: +$event })"
             />
           </label>
         </div>
@@ -78,7 +78,7 @@ import { ThemeService } from '../../core/theme/theme.service';
           ></textarea>
         </label>
 
-        <button type="button" class="btn btn-sm btn-ghost text-error gap-2" (click)="store.deleteSelected()">
+        <button type="button" class="btn btn-sm btn-ghost text-error gap-2" (click)="store.deleteSelection()">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
           Delete component
         </button>

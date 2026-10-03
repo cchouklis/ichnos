@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, HostListener, computed, effect, inject, signal } from '@angular/core';
 import { Title } from '@angular/platform-browser';
+import { EditorStore } from './core/state/editor.store';
 import { LayoutStore } from './core/state/layout.store';
 import { ProjectStore } from './core/state/project-store.service';
 import { ComplianceService } from './core/services/compliance.service';
@@ -24,6 +25,7 @@ type MobileSheet = 'menu' | null;
 export class AppComponent {
   readonly store = inject(ProjectStore);
   readonly layout = inject(LayoutStore);
+  readonly editor = inject(EditorStore);
   readonly compliance = inject(ComplianceService);
   readonly exportSvc = inject(ExportService);
   readonly underlay = inject(UnderlayService);
@@ -59,7 +61,7 @@ export class AppComponent {
   }
 
   toolLabel(): string {
-    const labels: Record<string, string> = { select: 'Select', wall: 'Draw Wall', room: 'Quick Room', wire: 'Wire', pan: 'Pan' };
-    return labels[this.store.tool()] ?? this.store.tool();
+    const labels: Record<string, string> = { select: 'Select', wall: 'Draw Wall', room: 'Quick Room', wire: 'Wire', component: 'Place Component' };
+    return labels[this.editor.tool()] ?? this.editor.tool();
   }
 }
