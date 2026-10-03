@@ -1,0 +1,188 @@
+<div class="relative h-full w-full bg-base-200 overflow-hidden">
+  <svg
+    #svgRef
+    viewBox="0 0 900 700"
+    preserveAspectRatio="xMidYMid meet"
+    class="block h-full w-full"
+    [style.touch-action]="'none'"
+    [class.cursor-crosshair]="store.tool() === 'wall' || store.tool() === 'room' || store.tool() === 'wire'"
+    [class.cursor-grab]="store.tool() === 'pan'"
+    (pointerdown)="onSvgPointerDown($event)"
+    (dblclick)="onSvgDoubleClick()"
+  >
+    <defs>
+      <pattern id="gridFine" width="12" height="12" patternUnits="userSpaceOnUse">
+        <path d="M12 0H0V12" fill="none" class="grid-line" stroke-width="1" />
+      </pattern>
+      <pattern id="gridMeter" width="60" height="60" patternUnits="userSpaceOnUse">
+        <rect width="60" height="60" fill="url(#gridFine)" />
+        <path d="M60 0H0V60" fill="none" class="grid-line-strong" stroke-width="1" />
+      </pattern>
+    </defs>
+
+    <g [attr.transform]="worldTransform()">
+      @if (store.bgImage(); as bg) {
+        <image [attr.href]="bg" x="0" y="0" [attr.width]="4 * PX" [attr.opacity]="store.bgOpacity()"></image>
+      }
+      <rect x="-3000" y="-3000" width="6000" height="6000" fill="url(#gridMeter)"></rect>
+
+      <!-- rooms -->
+      <g>
+        @for (room of store.rooms(); track room.id) {
+          @if (roomHasFill(room)) {
+            <polygon [attr.points]="roomPolygonPoints(room)" class="room-fill"></polygon>
+            <text
+              [attr.x]="roomLabelPos(room).x"
+              [attr.y]="roomLabelPos(room).y"
+              text-anchor="middle"
+              class="room-label"
+            >{{ roomAreaLabel(room) }}</text>
+          }
+        }
+      </g>
+
+      <!-- walls -->
+      <g>
+        @for (w of store.walls(); track w.id) {
+          <line
+            [attr.x1]="w.x1 * PX" [attr.y1]="w.y1 * PX"
+            [attr.x2]="w.x2 * PX" [attr.y2]="w.y2 * PX"
+            class="wall-line"
+            [attr.stroke-width]="wallStrokeWidth(w)"
+          ></line>
+        }
+      </g>
+
+      <!-- wiring -->
+      <g>
+        @for (wire of store.wires(); track wire.id) {
+          <path
+            [attr.d]="wireD(wire)"
+            class="wire-path"
+            [class.energized]="store.simulate()"
+            [attr.stroke]="wireColor(wire.circuit)"
+          ></path>
+        }
+      </g>
+
+      <!-- components -->
+      <g>
+        @for (c of store.components(); track c.id) {
+          <g
+            class="comp-group"
+            [class.selected]="isSelected(c.id)"
+            [attr.data-comp-id]="c.id"
+            [attr.transform]="compTransform(c)"
+          >
+            <rect class="comp-hit" x="-17" y="-17" width="34" height="34"></rect>
+            <circle
+              class="comp-outline"
+              r="16"
+              [attr.fill]="compColor(c) + '22'"
+              [attr.stroke]="compColor(c)"
+              stroke-width="1.4"
+            ></circle>
+            <g transform="translate(-13,-13)" [style.color]="compColor(c)">
+              <svg width="26" height="26" viewBox="0 0 24 24" [innerHTML]="compIconHtml(c)"></svg>
+            </g>
+            <text class="comp-label" x="0" y="29" text-anchor="middle" [attr.transform]="'rotate(' + -(c.rot || 0) + ')'">
+              {{ c.label }}
+            </text>
+          </g>
+        }
+      </g>
+
+      <!-- draft overlays -->
+      <g>
+        @for (seg of wallDraftLines(); track $index) {
+          <line
+            [attr.x1]="seg.p1.x * PX" [attr.y1]="seg.p1.y * PX"
+            [attr.x2]="seg.p2.x * PX" [attr.y2]="seg.p2.y * PX"
+            class="wall-line preview" stroke-width="4"
+          ></line>
+        }
+        @if (roomDraftPreview(); as r) {
+          <rect
+            [attr.x]="Math.min(r.x1, r.x2) * PX" [attr.y]="Math.min(r.y1, r.y2) * PX"
+            [attr.width]="Math.abs(r.x2 - r.x1) * PX" [attr.height]="Math.abs(r.y2 - r.y1) * PX"
+            class="draft-stroke"
+          ></rect>
+        }
+        @if (wireDraftPreview(); as wd) {
+          <path
+            [attr.d]="'M ' + wd.from.x * PX + ' ' + wd.from.y * PX + ' L ' + wd.to.x * PX + ' ' + wd.to.y * PX"
+            class="draft-stroke"
+          ></path>
+        }
+      </g>
+    </g>
+  </svg>
+
+  <!-- floating tool dock -->
+  <div class="absolute left-2 top-2 z-10 join join-vertical md:join-horizontal bg-base-100/90 backdrop-blur rounded-box border border-base-content/10 p-1 shadow-lg">
+    <button
+      type="button"
+      class="btn btn-square btn-sm join-item"
+      [class.btn-primary]="store.tool() === 'select'"
+      [class.btn-ghost]="store.tool() !== 'select'"
+      title="Select / Move (V)"
+      (click)="setTool('select')"
+    >
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 4 7.07 17 2.51-7.39L21 11.07z"/></svg>
+    </button>
+    <button
+      type="button"
+      class="btn btn-square btn-sm join-item hidden md:inline-flex"
+      [class.btn-primary]="store.tool() === 'wall'"
+      [class.btn-ghost]="store.tool() !== 'wall'"
+      title="Draw Wall (W)"
+      (click)="setTool('wall')"
+    >
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20 20 4"/><path d="M4 4v4M4 4h4M20 20v-4M20 20h-4"/></svg>
+    </button>
+    <button
+      type="button"
+      class="btn btn-square btn-sm join-item"
+      [class.btn-primary]="store.tool() === 'room'"
+      [class.btn-ghost]="store.tool() !== 'room'"
+      title="Quick Room (R)"
+      (click)="setTool('room')"
+    >
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="5" width="16" height="14" rx="1"/></svg>
+    </button>
+    <button
+      type="button"
+      class="btn btn-square btn-sm join-item hidden md:inline-flex"
+      [class.btn-primary]="store.tool() === 'wire'"
+      [class.btn-ghost]="store.tool() !== 'wire'"
+      title="Wire Tool (C)"
+      (click)="setTool('wire')"
+    >
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M8 8c3 0 5 8 8 8"/></svg>
+    </button>
+    <button
+      type="button"
+      class="btn btn-square btn-sm join-item"
+      [class.btn-primary]="store.tool() === 'pan'"
+      [class.btn-ghost]="store.tool() !== 'pan'"
+      title="Pan (Space)"
+      (click)="setTool('pan')"
+    >
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11V6a1.5 1.5 0 0 1 3 0v5"/><path d="M12 10.5V5a1.5 1.5 0 0 1 3 0v6"/><path d="M15 11V7a1.5 1.5 0 0 1 3 0v7c0 3.5-2 6-5.5 6h-2C7.5 20 6 18 5 16l-1.5-3c-.4-1 .3-2 1.3-1.8.5.1.9.5 1.2 1l1 1.8"/></svg>
+    </button>
+  </div>
+
+  <!-- zoom controls -->
+  <div class="absolute right-2 bottom-2 z-10 join join-vertical bg-base-100/90 backdrop-blur rounded-box border border-base-content/10 p-1 shadow-lg">
+    <button type="button" class="btn btn-square btn-sm btn-ghost join-item" title="Zoom in" (click)="zoomIn()">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg>
+    </button>
+    <div class="text-center font-mono text-[9.5px] text-base-content/70 py-0.5">{{ (store.zoom() * 100) | number: '1.0-0' }}%</div>
+    <button type="button" class="btn btn-square btn-sm btn-ghost join-item" title="Zoom out" (click)="zoomOut()">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M8 11h6"/></svg>
+    </button>
+    <button type="button" class="btn btn-square btn-sm btn-ghost join-item" title="Fit to view" (click)="fitToView()">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/></svg>
+    </button>
+  </div>
+</div>

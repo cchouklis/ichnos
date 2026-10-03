@@ -1,0 +1,210 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+/* ---------------------------------------------------------------------------
+   Themes. Blue is the primary colour, magenta the accent (and secondary, so the
+   existing `secondary` utilities pick up the accent). Status colours stay clearly
+   distinct from the brand hues. Text/background pairs are checked for WCAG AA by
+   src/app/core/theme/theme.contrast.test.ts.
+   --------------------------------------------------------------------------- */
+@plugin "daisyui/theme" {
+  name: "ichnos-light";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+  --color-base-100: #ffffff;
+  --color-base-200: #f3f5fb;
+  --color-base-300: #e6eaf5;
+  --color-base-content: #141a30;
+  --color-primary: #2f55e0;
+  --color-primary-content: #ffffff;
+  --color-secondary: #b0189a;
+  --color-secondary-content: #ffffff;
+  --color-accent: #b0189a;
+  --color-accent-content: #ffffff;
+  --color-neutral: #2b3552;
+  --color-neutral-content: #eef2fb;
+  --color-info: #0b62b8;
+  --color-info-content: #ffffff;
+  --color-success: #0b7a53;
+  --color-success-content: #ffffff;
+  --color-warning: #8a5300;
+  --color-warning-content: #ffffff;
+  --color-error: #c62828;
+  --color-error-content: #ffffff;
+  --radius-box: 0.75rem;
+  --radius-field: 0.5rem;
+}
+
+@plugin "daisyui/theme" {
+  name: "ichnos-dark";
+  default: false;
+  prefersdark: true;
+  color-scheme: dark;
+  --color-base-100: #0e1424;
+  --color-base-200: #0a1020;
+  --color-base-300: #070b17;
+  --color-base-content: #eef2fb;
+  --color-primary: #6c93ff;
+  --color-primary-content: #07102b;
+  --color-secondary: #f05ad8;
+  --color-secondary-content: #2a0526;
+  --color-accent: #f05ad8;
+  --color-accent-content: #2a0526;
+  --color-neutral: #1a2342;
+  --color-neutral-content: #c7d3e8;
+  --color-info: #7cc4ff;
+  --color-info-content: #04182b;
+  --color-success: #34d399;
+  --color-success-content: #03281c;
+  --color-warning: #fbbf24;
+  --color-warning-content: #2b1d00;
+  --color-error: #ff6b6b;
+  --color-error-content: #2d0505;
+  --radius-box: 0.75rem;
+  --radius-field: 0.5rem;
+}
+
+@theme {
+  --font-display: "Space Grotesk", sans-serif;
+  --font-sans: Inter, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+/* Plan (SVG) colours. SVG presentation attributes cannot read daisyUI's variables
+   through Tailwind utilities, so the 2D plan reads these per-theme custom properties. */
+:root,
+[data-theme='ichnos-light'] {
+  --plan-grid: rgba(47, 85, 224, 0.14);
+  --plan-grid-strong: rgba(47, 85, 224, 0.28);
+  --plan-wall: #2b3552;
+  --plan-room-fill: #e6ebfb;
+  --plan-room-label: #4d5a7a;
+  --plan-comp-label: #4d5a7a;
+}
+[data-theme='ichnos-dark'] {
+  --plan-grid: rgba(108, 147, 255, 0.12);
+  --plan-grid-strong: rgba(108, 147, 255, 0.26);
+  --plan-wall: #c7d3e8;
+  --plan-room-fill: #1a2338;
+  --plan-room-label: #9aa7c7;
+  --plan-comp-label: #9aa7c7;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overscroll-behavior: none;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Brand gradient: blue to magenta. Used on the logo mark, the power sweep and the
+   drawer step markers, never behind body text. */
+.brand-gradient {
+  background-image: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+}
+
+/* ---------- 2D plan SVG (kept as plain CSS: SVG presentation attributes
+   don't play well with Tailwind's utility-class model) ---------- */
+.grid-line {
+  stroke: var(--plan-grid);
+}
+.grid-line-strong {
+  stroke: var(--plan-grid-strong);
+}
+.wall-line {
+  stroke: var(--plan-wall);
+  stroke-linecap: square;
+}
+.wall-line.preview {
+  stroke: var(--color-secondary);
+  stroke-dasharray: 6 5;
+  opacity: 0.8;
+}
+.room-fill {
+  fill: var(--plan-room-fill);
+}
+.room-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  fill: var(--plan-room-label);
+  letter-spacing: 0.3px;
+}
+.draft-stroke {
+  fill: none;
+  stroke: var(--color-secondary);
+  stroke-dasharray: 6 5;
+  stroke-width: 2;
+}
+.wire-path {
+  fill: none;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.85;
+}
+.wire-path.energized {
+  stroke-dasharray: 6 5;
+  animation: flow-dash 1s linear infinite;
+}
+@keyframes flow-dash {
+  to {
+    stroke-dashoffset: -11;
+  }
+}
+.comp-group {
+  cursor: pointer;
+}
+.comp-group .comp-hit {
+  fill: transparent;
+}
+.comp-group.selected .comp-outline {
+  stroke: var(--color-secondary);
+  stroke-width: 2;
+  animation: select-pulse 1.6s ease-in-out infinite;
+}
+@keyframes select-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 4px color-mix(in oklab, var(--color-secondary) 50%, transparent));
+  }
+  50% {
+    filter: drop-shadow(0 0 10px color-mix(in oklab, var(--color-secondary) 85%, transparent));
+  }
+}
+.comp-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8.5px;
+  fill: var(--plan-comp-label);
+  pointer-events: none;
+}
+
+/* topbar "current sweep" while power simulation is active */
+.simulating .power-sweep {
+  opacity: 1;
+  animation: current-sweep 1.4s linear infinite;
+}
+.power-sweep {
+  opacity: 0;
+  background: linear-gradient(90deg, transparent, var(--color-primary), var(--color-accent), transparent);
+  background-size: 200% 100%;
+  background-position: 200% 0;
+  transition: opacity 0.3s;
+}
+@keyframes current-sweep {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wire-path.energized,
+  .comp-group.selected .comp-outline,
+  .power-sweep {
+    animation: none !important;
+  }
+}

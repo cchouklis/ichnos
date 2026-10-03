@@ -1,0 +1,104 @@
+<header
+  class="navbar relative h-14 min-h-0 gap-2 border-b border-base-content/10 bg-base-100 px-2 lg:px-3"
+  [class.simulating]="store.simulate()"
+>
+  <div class="power-sweep absolute inset-x-0 -bottom-px h-[2px]"></div>
+
+  <div class="indicator">
+    @if (compliance.issues().length > 0) {
+      <span class="indicator-item badge badge-error badge-xs" aria-hidden="true">{{ compliance.issues().length }}</span>
+    }
+    <button
+      type="button"
+      class="btn btn-ghost btn-square btn-sm"
+      [attr.aria-expanded]="layout.drawerVisible()"
+      aria-controls="cp-drawer"
+      [attr.aria-label]="'Project guide' + (compliance.issues().length > 0 ? ', ' + compliance.issues().length + ' issues to review' : '')"
+      title="Project guide"
+      (click)="layout.toggleDrawer()"
+    >
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+  </div>
+
+  <div class="flex shrink-0 items-center gap-2 font-display text-sm font-bold">
+    <span class="brand-gradient flex h-6 w-6 items-center justify-center rounded-md text-primary-content shadow" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M13 2 3 14h7l-1 8 11-14h-8l1-6z"/></svg>
+    </span>
+    <span class="hidden sm:inline">Ichnos</span>
+  </div>
+
+  <div class="ml-1 flex min-w-0 flex-col">
+    <input
+      type="text"
+      maxlength="200"
+      class="input input-ghost input-sm w-32 px-1 font-semibold focus:outline-secondary sm:w-44 md:w-56"
+      aria-label="Project name"
+      placeholder="Untitled project"
+      [ngModel]="store.projectName()"
+      (ngModelChange)="store.projectName.set($event)"
+      [ngModelOptions]="{ standalone: true }"
+    />
+  </div>
+
+  <div class="flex-1"></div>
+
+  <div class="hidden items-center gap-1 lg:flex">
+    <button type="button" class="btn btn-ghost btn-square btn-sm" [disabled]="!store.canUndo()" title="Undo (Ctrl+Z)" aria-label="Undo" (click)="store.undo()">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12H8"/></svg>
+    </button>
+    <button type="button" class="btn btn-ghost btn-square btn-sm" [disabled]="!store.canRedo()" title="Redo (Ctrl+Y)" aria-label="Redo" (click)="store.redo()">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h6"/></svg>
+    </button>
+  </div>
+
+  <div class="join">
+    <button
+      type="button"
+      class="btn btn-sm join-item hidden sm:inline-flex"
+      [class.btn-primary]="store.view() === '2d'"
+      [class.btn-ghost]="store.view() !== '2d'"
+      [attr.aria-pressed]="store.view() === '2d'"
+      (click)="store.setView('2d')"
+    >2D Plan</button>
+    <button
+      type="button"
+      class="btn btn-sm join-item hidden sm:inline-flex"
+      [class.btn-primary]="store.view() === '3d'"
+      [class.btn-ghost]="store.view() !== '3d'"
+      [attr.aria-pressed]="store.view() === '3d'"
+      (click)="store.setView('3d')"
+    >3D View</button>
+    <button type="button" class="btn btn-ghost btn-square btn-sm join-item sm:hidden" title="Toggle 2D/3D" aria-label="Switch between 2D plan and 3D view" (click)="toggleView()">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2 3 7l9 5 9-5-9-5Z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/></svg>
+    </button>
+  </div>
+
+  <button
+    type="button"
+    class="btn btn-sm gap-1.5"
+    [class.btn-primary]="store.simulate()"
+    [class.btn-ghost]="!store.simulate()"
+    title="Toggle power simulation"
+    [attr.aria-pressed]="store.simulate()"
+    (click)="toggleSimulate()"
+  >
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 11-14h-8l1-6z"/></svg>
+    <span class="hidden lg:inline">Simulate Power</span>
+  </button>
+
+  <div class="hidden sm:block">
+    <cp-theme-switch />
+  </div>
+
+  <div class="dropdown dropdown-end">
+    <button tabindex="0" type="button" class="btn btn-primary btn-sm gap-1.5" aria-label="Export">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+      <span class="hidden lg:inline">Export</span>
+    </button>
+    <ul tabindex="0" class="dropdown-content menu z-20 mt-2 w-56 rounded-box border border-base-content/10 bg-base-100 p-2 shadow-xl">
+      <li><a (click)="exportSvc.exportJson()">Export project (.json)</a></li>
+      <li><a (click)="exportSvc.exportMaterialsCsv()">Export materials (.csv)</a></li>
+    </ul>
+  </div>
+</header>
