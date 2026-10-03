@@ -1,0 +1,9 @@
+.xml
+.meta
+.env
+.idea
+.gitignore
+.yaml
+.yml
+/target/classes/application.yml
+/src/main/resources/application.yml
