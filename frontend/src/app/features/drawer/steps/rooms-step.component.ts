@@ -147,7 +147,7 @@ export class RoomsStepComponent {
 
   openSheet(id: string | null): void {
     this.editor.setSheet(id);
-    this.layout.closeOverlay();
+    this.layout.dismissGuideOnPhone();
   }
 
   addRoom(): void {
