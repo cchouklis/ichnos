@@ -4,7 +4,6 @@ import { CATEGORY_META, COMPONENT_TYPES } from '../../core/data/component-types.
 import { ComponentCategory, ComponentType } from '../../core/models';
 import { DragDropService } from '../../core/services/drag-drop.service';
 import { IconRegistryService } from '../../core/services/icon-registry.service';
-import { LayoutStore } from '../../core/state/layout.store';
 import { EditorStore } from '../../core/state/editor.store';
 import { ThemeService } from '../../core/theme/theme.service';
 
@@ -40,7 +39,6 @@ export class PaletteComponent {
   readonly icons = inject(IconRegistryService);
   readonly theme = inject(ThemeService);
   readonly editor = inject(EditorStore);
-  private readonly layout = inject(LayoutStore);
 
   readonly groups: CategoryGroup[] = buildGroups();
   readonly openCategory = signal<ComponentCategory | null>(this.groups[0]?.cat ?? null);
@@ -57,7 +55,6 @@ export class PaletteComponent {
   /** Tap or Enter arms the type for placement: every click on the plan then places one. Dragging still drops exactly where you release. */
   place(typeId: string): void {
     this.editor.armComponent(typeId);
-    this.layout.closeOverlay();
   }
 
   draggingTypeId(): string | null {

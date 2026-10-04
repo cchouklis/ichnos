@@ -3,28 +3,25 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { EditorStore } from '../../../core/state/editor.store';
 import { SimulationService } from '../../../core/simulation/simulation.service';
 import { ProjectStore } from '../../../core/state/project-store.service';
+import { WireOptionsComponent } from '../../tool-panel/wire-options.component';
 
 @Component({
   selector: 'cp-wiring-step',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule],
+  imports: [CommonModule, WireOptionsComponent],
   template: `
     <div class="space-y-3">
-      <button type="button" class="btn btn-sm w-full" [class.btn-primary]="editor.tool() === 'wire'" (click)="editor.setTool('wire')">
-        Wire tool: connect two devices
+      <cp-wire-options />
+      <button type="button" class="btn btn-sm w-full pointer-coarse:h-11" [class.btn-primary]="editor.tool() === 'wire'" (click)="editor.setTool('wire')">
+        Connect devices with wires
       </button>
-      <ul class="list-disc space-y-1 pl-4 text-[11.5px] leading-relaxed text-base-content/70">
-        <li>Click one device, then the next, to connect them. Right-click a wire to delete it.</li>
-        <li>Hold Ctrl and drag to select several wires; change their circuit in the panel.</li>
-        <li>Power flows from the panel. A light only glows when power reaches it through its switch.</li>
-        <li>While simulating, click a switch on the plan or in 3D, or use the simulation panel; dimmers have a brightness slider.</li>
-        <li>Wire colours show the circuit.</li>
-        <li>Press Escape to cancel a wire you have started.</li>
-      </ul>
+      <p class="text-[11.5px] leading-relaxed text-base-content/70">
+        Tap one device, then the next. Power flows from the panel; a light glows only when power reaches it through its switch.
+      </p>
       <button
         type="button"
-        class="btn btn-sm w-full"
+        class="btn btn-sm w-full pointer-coarse:h-11"
         [class.btn-primary]="sim.enabled()"
         [attr.aria-pressed]="sim.enabled()"
         (click)="sim.toggle()"

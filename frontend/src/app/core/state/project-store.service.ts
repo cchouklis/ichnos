@@ -43,7 +43,7 @@ export class ProjectStore {
   readonly scalePxPerMeter = 60;
 
   // ---- UI / editor state ----------------------------------------------
-  readonly view = signal<ViewMode>('2d');
+  readonly view = this.editor.view;
   readonly bgImage = signal<string | null>(null);
   readonly bgOpacity = signal(0.5);
 
@@ -132,7 +132,7 @@ export class ProjectStore {
   // View
   // ---------------------------------------------------------------------
   setView(view: ViewMode): void {
-    this.view.set(view);
+    this.editor.setView(view);
   }
 
   // ---------------------------------------------------------------------
