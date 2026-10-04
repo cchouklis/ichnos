@@ -1,32 +1,45 @@
-<div [class]="layoutClass()" class="h-dvh grid-rows-[minmax(0,1fr)]">
-  <input
-    id="cp-drawer-toggle"
-    type="checkbox"
-    class="drawer-toggle"
-    tabindex="-1"
-    aria-hidden="true"
-    [checked]="layout.overlayOpen()"
-    (change)="onOverlayToggle($event)"
-  />
+<div class="flex h-full flex-col overflow-hidden bg-base-300">
+  <cp-topbar />
 
-  <div class="drawer-content flex h-full min-w-0 flex-col overflow-hidden bg-base-300">
-    <cp-topbar />
+  <div class="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+    @switch (layout.viewport()) {
+      @case ('desktop') {
+        @if (layout.guideOpen()) {
+          <aside id="cp-drawer" class="w-[22rem] max-w-[40vw] shrink-0 overflow-hidden border-r border-base-content/10 bg-base-100">
+            <cp-drawer />
+          </aside>
+        }
+      }
+      @case ('tablet') {
+        <cp-drawer-rail />
+        @if (layout.guideOpen()) {
+          <aside id="cp-drawer" class="absolute inset-y-0 left-16 flex flex-col z-20 w-80 max-w-[calc(100%-4rem)] border-r border-base-content/10 bg-base-100 shadow-xl md:static md:z-auto md:shrink-0 md:shadow-none">
+            <cp-guide-panel [closable]="true" (dismissed)="layout.closeGuide()" />
+          </aside>
+        }
+      }
+    }
 
-    <main class="relative min-h-0 min-w-0 flex-1">
+    <main class="relative min-h-0 min-w-0 flex-1 overflow-hidden">
       @if (store.view() === '2d') {
         <cp-canvas />
+        @if (layout.viewport() !== 'phone') {
+          <cp-edit-toolbar />
+        }
       } @else {
         <cp-viewer3d />
       }
-      <div class="pointer-events-none absolute left-2 top-14 z-10 md:top-14">
-        <div class="pointer-events-auto">
-          <cp-simulation-panel />
-        </div>
+      <div class="pointer-events-none absolute inset-x-2 bottom-2 z-10 flex max-h-[60%] flex-col justify-end gap-2 sm:inset-x-auto sm:bottom-auto sm:right-2 sm:top-16 sm:max-h-[calc(100%-10rem)] sm:w-72 sm:justify-start lg:w-64">
+        <div class="pointer-events-auto"><cp-simulation-panel /></div>
+        @if (layout.viewport() === 'desktop' && store.view() === '2d') {
+          <div class="pointer-events-auto"><cp-tool-panel /></div>
+        }
       </div>
     </main>
+  </div>
 
-    <!-- status bar -->
-    <div class="hidden h-7 shrink-0 items-center gap-4 border-t border-base-content/10 bg-base-100 px-3 font-mono text-[10.5px] text-base-content/70 sm:flex">
+  @if (layout.viewport() === 'desktop') {
+    <div class="flex h-7 shrink-0 items-center gap-4 border-t border-base-content/10 bg-base-100 px-3 font-mono text-[10.5px] text-base-content/70">
       <span>Tool: {{ toolLabel() }}</span>
       <span>Sheet: {{ sheetLabel() }}</span>
       <span>{{ store.walls().length }} walls · {{ store.components().length }} components · {{ store.circuitCount() }} circuits</span>
@@ -34,116 +47,22 @@
       <span class="h-1.5 w-1.5 rounded-full" [class]="sim.enabled() ? 'bg-success' : 'bg-base-content/30'"></span>
       <span>{{ sim.enabled() ? 'Power simulation on' : 'Power off' }}</span>
     </div>
+  }
 
-    <!-- mobile bottom nav -->
-    <div class="dock dock-sm relative z-30 border-t border-base-content/10 lg:hidden">
-      <button type="button" [class.dock-active]="editor.tool() === 'select'" (click)="editor.setTool('select')">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m4 4 7.07 17 2.51-7.39L21 11.07z"/></svg>
-        <span class="dock-label text-[10px]">Select</span>
-      </button>
-      <button type="button" [class.dock-active]="editor.tool() === 'wall'" (click)="editor.setTool('wall')">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 20 20 4"/></svg>
-        <span class="dock-label text-[10px]">Wall</span>
-      </button>
-      <button type="button" [class.dock-active]="editor.tool() === 'wire'" (click)="editor.setTool('wire')">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M8 8c3 0 5 8 8 8"/></svg>
-        <span class="dock-label text-[10px]">Wire</span>
-      </button>
-      <button type="button" [class.dock-active]="layout.overlayOpen()" (click)="layout.open()">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h7"/><circle cx="19" cy="12" r="2"/></svg>
-        <span class="dock-label text-[10px]">Steps</span>
-        @if (compliance.issues().length > 0) {
-          <span class="badge badge-error badge-xs absolute right-6 top-1">{{ compliance.issues().length }}</span>
-        }
-      </button>
-      <button type="button" [class.dock-active]="sheet() === 'menu'" (click)="openSheet('menu')">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
-        <span class="dock-label text-[10px]">Menu</span>
-      </button>
-    </div>
-
-    <button
-      type="button"
-      class="btn btn-circle btn-primary fixed bottom-20 right-4 z-30 shadow-lg lg:hidden"
-      title="Add component"
-      aria-label="Add component"
-      (click)="layout.open('components')"
-    >
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-    </button>
-  </div>
-
-  <div class="drawer-side z-40">
-    <label for="cp-drawer-toggle" aria-label="Close project guide" class="drawer-overlay"></label>
-    <aside id="cp-drawer" class="h-full w-[min(92vw,22rem)] border-r border-base-content/10 bg-base-100">
-      <cp-drawer />
-    </aside>
-  </div>
+  @if (layout.viewport() === 'phone') {
+    <cp-bottom-nav />
+  }
 </div>
 
-<!-- mobile menu sheet -->
-<div class="modal modal-bottom lg:hidden" [class.modal-open]="sheet() === 'menu'">
-  <div class="modal-box max-h-[78vh]" role="dialog" aria-label="Menu">
-    <div class="-mx-6 flex items-center justify-between border-b border-base-content/10 px-6 pb-3">
-      <span class="font-display font-bold">Menu</span>
-      <button type="button" class="btn btn-sm btn-circle btn-ghost" aria-label="Close menu" (click)="closeSheet()">✕</button>
-    </div>
-
-    <div class="space-y-4 pt-4">
-      <div>
-        <span class="mb-1.5 block text-[10.5px] uppercase tracking-wide text-base-content/70">Edit</span>
-        <div class="flex gap-2">
-          <button type="button" class="btn btn-sm flex-1" [disabled]="!store.canUndo()" (click)="store.undo()">Undo</button>
-          <button type="button" class="btn btn-sm flex-1" [disabled]="!store.canRedo()" (click)="store.redo()">Redo</button>
-        </div>
-      </div>
-
-      <div>
-        <span class="mb-1.5 block text-[10.5px] uppercase tracking-wide text-base-content/70">More tools</span>
-        <p class="mb-1.5 text-[11px] text-base-content/70">Pan with two fingers; pinch to zoom. Use Draw / Erase / Select on the plan to choose what a tap does.</p>
-        <div class="flex gap-2">
-          <button type="button" class="btn btn-sm flex-1" [class.btn-primary]="editor.tool() === 'room'" (click)="editor.setTool('room'); closeSheet()">Quick Room</button>
-        </div>
-      </div>
-
-      <div>
-        <span class="mb-1.5 block text-[10.5px] uppercase tracking-wide text-base-content/70">View</span>
-        <button type="button" class="btn btn-sm w-full" (click)="store.setView(store.view() === '2d' ? '3d' : '2d')">
-          Switch to {{ store.view() === '2d' ? '3D View' : '2D Plan' }}
-        </button>
-      </div>
-
-      <div>
-        <span class="mb-1.5 block text-[10.5px] uppercase tracking-wide text-base-content/70">Theme</span>
-        <cp-theme-switch />
-      </div>
-
-      <div>
-        <span class="mb-1.5 block text-[10.5px] uppercase tracking-wide text-base-content/70">Power</span>
-        <button type="button" class="btn btn-sm w-full" [class.btn-primary]="sim.enabled()" (click)="sim.toggle()">
-          {{ sim.enabled() ? 'Stop simulation' : 'Simulate Power' }}
-        </button>
-      </div>
-
-      <div>
-        <span class="mb-1.5 block text-[10.5px] uppercase tracking-wide text-base-content/70">Blueprint underlay</span>
-        <label class="btn btn-sm w-full">
-          Upload image
-          <input type="file" class="hidden" [accept]="underlay.accept" (change)="underlay.handleInput($event)" />
-        </label>
-        @if (underlay.error(); as err) {
-          <p class="mt-1.5 text-[11px] text-error" role="alert">{{ err }}</p>
-        }
-      </div>
-
-      <div>
-        <span class="mb-1.5 block text-[10.5px] uppercase tracking-wide text-base-content/70">Export</span>
-        <div class="flex flex-col gap-2">
-          <button type="button" class="btn btn-sm btn-primary" (click)="exportSvc.exportJson(); closeSheet()">Export project (.json)</button>
-          <button type="button" class="btn btn-sm" (click)="exportSvc.exportMaterialsCsv(); closeSheet()">Export materials (.csv)</button>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="modal-backdrop" (click)="closeSheet()"></div>
-</div>
+@if (layout.viewport() === 'phone') {
+  <cp-bottom-sheet label="Project guide" [open]="layout.guideOpen()" (closed)="layout.closeGuide()">
+    @if (layout.guideOpen()) {
+      <cp-guide-panel [tabs]="true" />
+    }
+  </cp-bottom-sheet>
+  <cp-bottom-sheet label="Menu" [open]="layout.menuOpen()" (closed)="layout.closeMenu()">
+    @if (layout.menuOpen()) {
+      <cp-menu-actions />
+    }
+  </cp-bottom-sheet>
+}

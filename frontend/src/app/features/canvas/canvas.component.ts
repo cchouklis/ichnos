@@ -17,7 +17,7 @@ import { SafeHtml } from '@angular/platform-browser';
 import type { ComponentInstance, ElementKind, ElementRef as PlanElementRef, Point, Room, Tool, Wall, Wire } from '../../core/models';
 import { typeById } from '../../core/data/component-types.data';
 import { mmToMeters } from '../../core/units/units.util';
-import { EditorStore, type InteractionMode } from '../../core/state/editor.store';
+import { EditorStore } from '../../core/state/editor.store';
 import { SimulationService } from '../../core/simulation/simulation.service';
 import { LayoutStore } from '../../core/state/layout.store';
 import { ProjectStore } from '../../core/state/project-store.service';
@@ -36,7 +36,6 @@ import {
   type Rect,
 } from '../../core/util/selection.util';
 import { ToolButtonComponent } from '../ui/tool-button.component';
-import { ToolPanelComponent } from '../tool-panel/tool-panel.component';
 import type { CanvasTool, PointerInfo } from './tools/canvas-tool';
 import { ComponentTool } from './tools/component.tool';
 import { RoomTool } from './tools/room.tool';
@@ -54,12 +53,15 @@ const GLOW_BASE_RADIUS = 20;
 const GLOW_LEVEL_RADIUS = 44;
 const MARQUEE_MIN_PX = 3;
 const HIT_WIDTH_PX = 18;
+const HIT_WIDTH_TOUCH_PX = 30;
+const COMP_HIT_HALF = 17;
+const COMP_HIT_HALF_TOUCH = 24;
 const KIND_SET: ReadonlySet<string> = new Set<ElementKind>(ALL_KINDS);
 
 @Component({
   selector: 'cp-canvas',
   standalone: true,
-  imports: [CommonModule, ToolButtonComponent, ToolPanelComponent],
+  imports: [CommonModule, ToolButtonComponent],
   templateUrl: './canvas.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -126,17 +128,12 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
   readonly sheetRoom = computed(() => this.store.rooms().find((r) => r.id === this.editor.activeSheet()) ?? null);
   readonly stubs = computed<WireStub[]>(() => [...(this.scope()?.stubs ?? [])]);
 
-  readonly hitWidth = computed(() => HIT_WIDTH_PX / this.editor.zoom());
+  readonly hitWidth = computed(() => (this.layout.coarsePointer() ? HIT_WIDTH_TOUCH_PX : HIT_WIDTH_PX) / this.editor.zoom());
+  readonly compHitHalf = computed(() => (this.layout.coarsePointer() ? COMP_HIT_HALF_TOUCH : COMP_HIT_HALF));
   readonly armedLabel = computed(() => {
     const id = this.editor.armedType();
     return id ? typeById(id).label : null;
   });
-
-  readonly modes: { id: InteractionMode; label: string; description: string }[] = [
-    { id: 'draw', label: 'Draw', description: 'Taps add walls, components or wires with the active tool.' },
-    { id: 'erase', label: 'Erase', description: 'Tap a wall, component or wire to delete it.' },
-    { id: 'select', label: 'Select', description: 'Tap to select, or drag a box around several items.' },
-  ];
 
   constructor() {
     // Restore (or fit) the view whenever the sheet changes.
@@ -165,12 +162,6 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
   // ---------------------------------------------------------------------
   setTool(tool: Tool): void {
     this.editor.setTool(tool);
-  }
-
-  /** The component tool needs an armed type; without one, send the user to the guide's component step. */
-  openComponentTool(): void {
-    if (this.editor.armedType()) this.editor.setTool('component');
-    else this.layout.open('components');
   }
 
   backToMaster(): void {
@@ -221,10 +212,6 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
     } else {
       this.fitToView();
     }
-  }
-
-  setMode(mode: InteractionMode): void {
-    this.editor.setMode(mode);
   }
 
   private resetGestures(): void {
@@ -278,7 +265,8 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
   // Pointer interaction
   //   left            → active tool          right (mouse)   → erase
   //   Ctrl/Cmd + drag → box select           middle / Space  → pan
-  //   touch           → Draw / Erase / Select mode, two fingers pan + zoom
+  //   view only       → drag pans, switches toggle while simulating
+  //   touch editing   → tool + Draw / Erase, two fingers pan + zoom
   // ---------------------------------------------------------------------
   onSvgPointerDown(e: PointerEvent): void {
     this.activePointers.set(e.pointerId, e);
@@ -287,6 +275,11 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
       return;
     }
     if (this.activePointers.size > 2 || this.gesture === 'multitouch') return;
+
+    if (!this.editor.canEdit()) {
+      if (!this.toggleSwitchAt(this.infoFromEvent(e, true))) this.beginPan(e);
+      return;
+    }
 
     const isMouse = e.pointerType === 'mouse';
     const tool = this.activeTool();
@@ -311,13 +304,12 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
     }
 
     if (!isMouse) {
-      const mode = this.editor.mode();
-      if (mode === 'erase') {
-        tool.secondaryDown(info);
+      if (tool.id === 'select') {
+        this.touchSelect(e, info, tool);
         return;
       }
-      if (mode === 'select') {
-        this.touchSelect(e, info, tool);
+      if (this.editor.mode() === 'erase') {
+        tool.secondaryDown(info);
         return;
       }
     }
@@ -538,7 +530,7 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
 
   @HostListener('window:keydown', ['$event'])
   onKeydown(e: KeyboardEvent): void {
-    if (this.isTypingTarget(e.target)) return;
+    if (this.isTypingTarget(e.target) || !this.editor.canEdit()) return;
 
     if (e.code === 'Space') {
       // Leave Space alone on focused controls, where it activates the control.
@@ -587,7 +579,7 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
       case 'w': this.setTool('wall'); break;
       case 'r': this.setTool('room'); break;
       case 'c': this.setTool('wire'); break;
-      case 'p': this.openComponentTool(); break;
+      case 'p': this.editor.chooseComponentTool(); break;
       default:
     }
   }

@@ -1,27 +1,44 @@
-import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, HostListener, computed, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { EditorStore } from './core/state/editor.store';
 import { SimulationService } from './core/simulation/simulation.service';
+import { GuideSyncService } from './core/state/guide-sync.service';
 import { LayoutStore } from './core/state/layout.store';
 import { ProjectStore } from './core/state/project-store.service';
-import { ComplianceService } from './core/services/compliance.service';
-import { ExportService } from './core/services/export.service';
-import { UnderlayService } from './core/services/underlay.service';
 import { TopbarComponent } from './features/topbar/topbar.component';
 import { CanvasComponent } from './features/canvas/canvas.component';
 import { Viewer3dComponent } from './features/viewer3d/viewer3d.component';
 import { DrawerComponent } from './features/drawer/drawer.component';
+import { DrawerRailComponent } from './features/drawer/drawer-rail.component';
+import { GuidePanelComponent } from './features/drawer/guide-panel.component';
+import { EditToolbarComponent } from './features/editing/edit-toolbar.component';
+import { BottomNavComponent } from './features/navigation/bottom-nav.component';
+import { MenuActionsComponent } from './features/navigation/menu-actions.component';
 import { SimulationPanelComponent } from './features/simulation/simulation-panel.component';
-import { ThemeSwitchComponent } from './features/theme-switch/theme-switch.component';
+import { ToolPanelComponent } from './features/tool-panel/tool-panel.component';
+import { BottomSheetComponent } from './features/ui/bottom-sheet.component';
 
-type MobileSheet = 'menu' | null;
+const TOOL_LABELS: Record<string, string> = { select: 'Select', wall: 'Draw Wall', room: 'Quick Room', wire: 'Wire', component: 'Place Component' };
 
 @Component({
   selector: 'cp-root',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, TopbarComponent, CanvasComponent, Viewer3dComponent, DrawerComponent, ThemeSwitchComponent, SimulationPanelComponent],
+  imports: [
+    TopbarComponent,
+    CanvasComponent,
+    Viewer3dComponent,
+    DrawerComponent,
+    DrawerRailComponent,
+    GuidePanelComponent,
+    EditToolbarComponent,
+    BottomNavComponent,
+    MenuActionsComponent,
+    BottomSheetComponent,
+    SimulationPanelComponent,
+    ToolPanelComponent,
+  ],
+  host: { class: 'block h-dvh w-full overflow-hidden' },
   templateUrl: './app.component.html',
 })
 export class AppComponent {
@@ -29,38 +46,14 @@ export class AppComponent {
   readonly layout = inject(LayoutStore);
   readonly editor = inject(EditorStore);
   readonly sim = inject(SimulationService);
-  readonly compliance = inject(ComplianceService);
-  readonly exportSvc = inject(ExportService);
-  readonly underlay = inject(UnderlayService);
   private readonly title = inject(Title);
 
-  readonly sheet = signal<MobileSheet>(null);
-
-  /** The drawer is pinned beside the editor on desktop and an overlay below it (daisyUI's `drawer-open` pattern). */
-  readonly layoutClass = computed(() => (this.layout.pinned() ? 'drawer lg:drawer-open' : 'drawer'));
-
   constructor() {
+    inject(GuideSyncService);
     effect(() => {
       const name = this.store.projectName().trim();
       this.title.setTitle(name ? `${name} — Ichnos` : 'Ichnos — Electrical Blueprint Designer');
     });
-  }
-
-  @HostListener('window:keydown.escape')
-  onEscape(): void {
-    this.layout.closeOverlay();
-  }
-
-  openSheet(s: MobileSheet): void {
-    this.sheet.set(s);
-  }
-
-  closeSheet(): void {
-    this.sheet.set(null);
-  }
-
-  onOverlayToggle(event: Event): void {
-    this.layout.setOverlayOpen((event.target as HTMLInputElement).checked);
   }
 
   sheetLabel(): string {
@@ -69,7 +62,6 @@ export class AppComponent {
   }
 
   toolLabel(): string {
-    const labels: Record<string, string> = { select: 'Select', wall: 'Draw Wall', room: 'Quick Room', wire: 'Wire', component: 'Place Component' };
-    return labels[this.editor.tool()] ?? this.editor.tool();
+    return TOOL_LABELS[this.editor.tool()] ?? this.editor.tool();
   }
 }

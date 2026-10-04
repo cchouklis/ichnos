@@ -1,10 +1,11 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import type { ElementKind, ElementRef, Point, Tool } from '../models';
 import { MOUNT_HEIGHT_MM, WALL_HEIGHT_MM, WALL_THICKNESS_MM } from '../units/units.util';
 import { refsOfKind } from '../util/selection.util';
+import { LayoutStore } from './layout.store';
 
-/** What a plain tap/click does. Mouse users get this from buttons; touch users switch it explicitly. */
-export type InteractionMode = 'draw' | 'erase' | 'select';
+/** What a tap does with a drawing tool. Mouse users have right-click for erasing; touch users switch explicitly. */
+export type InteractionMode = 'draw' | 'erase';
 
 export const MIN_ZOOM = 0.25;
 export const MAX_ZOOM = 3;
@@ -15,6 +16,14 @@ export const MAX_ZOOM = 3;
  */
 @Injectable({ providedIn: 'root' })
 export class EditorStore {
+  private readonly layout = inject(LayoutStore);
+
+  // ---- edit access ---------------------------------------------------------------------
+  /** Tablet and phone open in view-only mode; the user switches editing on explicitly. */
+  readonly editing = signal(false);
+  /** Desktop always edits; touch layouts edit only after the user asked for it. */
+  readonly canEdit = computed(() => this.layout.viewport() === 'desktop' || this.editing());
+
   // ---- tool & mode -------------------------------------------------------
   readonly tool = signal<Tool>('select');
   readonly mode = signal<InteractionMode>('draw');
@@ -71,9 +80,33 @@ export class EditorStore {
 
   readonly defaultMountHeightMm = MOUNT_HEIGHT_MM.default;
 
+  startEditing(): void {
+    this.editing.set(true);
+  }
+
+  /** Back to view-only: drops the tool, the armed component and the selection. */
+  stopEditing(): void {
+    this.editing.set(false);
+    this.tool.set('select');
+    this.mode.set('draw');
+    this.armedType.set(null);
+    this.clearSelection();
+  }
+
   setTool(tool: Tool): void {
+    this.editing.set(true);
     this.tool.set(tool);
+    this.mode.set('draw');
     if (tool !== 'component') this.armedType.set(null);
+  }
+
+  /** The component tool needs an armed type; without one the user is sent to the guide's component step. */
+  chooseComponentTool(): void {
+    if (this.armedType()) this.setTool('component');
+    else {
+      this.editing.set(true);
+      this.layout.openGuide('components');
+    }
   }
 
   setMode(mode: InteractionMode): void {
@@ -82,6 +115,7 @@ export class EditorStore {
 
   /** Arms a component type for sticky placement and switches to the component tool. */
   armComponent(typeId: string): void {
+    this.editing.set(true);
     this.armedType.set(typeId);
     this.tool.set('component');
   }

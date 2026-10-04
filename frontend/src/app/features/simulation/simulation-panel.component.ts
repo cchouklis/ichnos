@@ -7,7 +7,7 @@ import { SimulationService } from '../../core/simulation/simulation.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (sim.enabled()) {
-      <section class="w-60 rounded-box border border-base-content/10 bg-base-100/95 shadow-xl backdrop-blur" aria-label="Power simulation">
+      <section class="w-full rounded-box border border-base-content/10 bg-base-100/95 shadow-xl backdrop-blur" aria-label="Power simulation">
         <header class="flex items-center justify-between gap-2 px-3 py-2">
           <h2 class="text-xs font-semibold uppercase tracking-wide text-base-content/70">Power simulation</h2>
           <button

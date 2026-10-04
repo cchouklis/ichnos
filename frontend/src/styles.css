@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @plugin "daisyui";
 
+/* Landscape phones and other short screens. */
+@custom-variant short (@media (max-height: 30rem));
+
 /* ---------------------------------------------------------------------------
    Themes. Blue is the primary colour, magenta the accent (and secondary, so the
    existing `secondary` utilities pick up the accent). Status colours stay clearly
@@ -95,7 +98,16 @@ html,
 body {
   height: 100%;
   margin: 0;
+  overflow: hidden;
   overscroll-behavior: none;
+}
+
+button,
+[role='button'],
+summary,
+label {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 * {
