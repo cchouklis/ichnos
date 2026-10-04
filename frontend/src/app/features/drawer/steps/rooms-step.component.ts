@@ -83,6 +83,7 @@ interface RoomRow {
               class="btn btn-square btn-ghost btn-sm"
               [attr.aria-label]="'Rename ' + row.room.label"
               title="Rename"
+              [disabled]="!editor.planEditable()"
               (click)="editingId.set(row.room.id)"
             >
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
@@ -92,6 +93,7 @@ interface RoomRow {
               class="btn btn-square btn-ghost btn-sm hover:text-error"
               [attr.aria-label]="'Delete ' + row.room.label"
               title="Delete room"
+              [disabled]="!editor.planEditable()"
               (click)="pendingDelete.set(row.room)"
             >
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
@@ -111,7 +113,7 @@ interface RoomRow {
         </div>
       }
 
-      <button type="button" class="btn btn-sm btn-primary w-full" (click)="addRoom()">Add room</button>
+      <button type="button" class="btn btn-sm btn-primary w-full" [disabled]="!editor.planEditable()" (click)="addRoom()">Add room</button>
 
       <div class="rounded-box border border-dashed border-base-content/20 bg-base-200 p-2.5 text-[11px] leading-relaxed text-base-content/70">
         Open a room, then draw its walls and place its components there. In the master plan, a closed wall loop or the Quick room tool creates a room automatically.
@@ -120,6 +122,7 @@ interface RoomRow {
         type="button"
         class="btn btn-sm w-full"
         [class.btn-primary]="editor.tool() === 'room'"
+        [disabled]="!editor.planEditable()"
         (click)="editor.setTool('room')"
       >Quick room: drag a rectangle on the plan</button>
     </div>

@@ -1,5 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import type { ElementKind, ElementRef, Point, Tool } from '../models';
+import type { ElementKind, ElementRef, Point, Tool, ViewMode } from '../models';
 import { MOUNT_HEIGHT_MM, WALL_HEIGHT_MM, WALL_THICKNESS_MM } from '../units/units.util';
 import { refsOfKind } from '../util/selection.util';
 import { LayoutStore } from './layout.store';
@@ -18,11 +18,21 @@ export const MAX_ZOOM = 3;
 export class EditorStore {
   private readonly layout = inject(LayoutStore);
 
+  // ---- view ------------------------------------------------------------------------------
+  readonly view = signal<ViewMode>('2d');
+  /** Only the 2D plan can be edited; the 3D view is for looking and for simulation switches. */
+  readonly planEditable = computed(() => this.view() === '2d');
+
+  setView(view: ViewMode): void {
+    this.view.set(view);
+    if (view === '3d') this.stopEditing();
+  }
+
   // ---- edit access ---------------------------------------------------------------------
   /** Tablet and phone open in view-only mode; the user switches editing on explicitly. */
   readonly editing = signal(false);
   /** Desktop always edits; touch layouts edit only after the user asked for it. */
-  readonly canEdit = computed(() => this.layout.viewport() === 'desktop' || this.editing());
+  readonly canEdit = computed(() => this.planEditable() && (this.layout.viewport() === 'desktop' || this.editing()));
 
   // ---- tool & mode -------------------------------------------------------
   readonly tool = signal<Tool>('select');
@@ -81,7 +91,7 @@ export class EditorStore {
   readonly defaultMountHeightMm = MOUNT_HEIGHT_MM.default;
 
   startEditing(): void {
-    this.editing.set(true);
+    if (this.planEditable()) this.editing.set(true);
   }
 
   /** Back to view-only: drops the tool, the armed component and the selection. */
@@ -94,6 +104,7 @@ export class EditorStore {
   }
 
   setTool(tool: Tool): void {
+    if (!this.planEditable()) return;
     this.editing.set(true);
     this.tool.set(tool);
     this.mode.set('draw');
@@ -102,6 +113,7 @@ export class EditorStore {
 
   /** The component tool needs an armed type; without one the user is sent to the guide's component step. */
   chooseComponentTool(): void {
+    if (!this.planEditable()) return;
     if (this.armedType()) this.setTool('component');
     else {
       this.editing.set(true);
@@ -115,6 +127,7 @@ export class EditorStore {
 
   /** Arms a component type for sticky placement and switches to the component tool. */
   armComponent(typeId: string): void {
+    if (!this.planEditable()) return;
     this.editing.set(true);
     this.armedType.set(typeId);
     this.tool.set('component');
