@@ -20,6 +20,11 @@ test('toWire converts mm to metres', () => {
   assert.equal('mountHeight' in w.components[1], false);
 });
 
+test('toWire drops roomId, which the current backend does not know', () => {
+  const w = toWire({ ...dto, components: [{ ...dto.components[0], roomId: 'r1' }] });
+  assert.equal('roomId' in w.components[0], false);
+});
+
 test('round trip is lossless', () => {
   assert.deepEqual(fromWire(toWire(dto)), dto);
 });

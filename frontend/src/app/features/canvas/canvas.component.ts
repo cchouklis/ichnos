@@ -24,7 +24,8 @@ import { ThemeService } from '../../core/theme/theme.service';
 import { circuitColor } from '../../core/theme/theme.util';
 import { DragDropService } from '../../core/services/drag-drop.service';
 import { IconRegistryService } from '../../core/services/icon-registry.service';
-import { clamp, pathFromWaypoints, shoelaceArea, wireWaypoints } from '../../core/util/geometry.util';
+import { clamp, distance, pathFromWaypoints, wireWaypoints } from '../../core/util/geometry.util';
+import { isRoomClosed, roomArea, roomPolygon, scopeToRoom, type WireStub } from '../../core/util/sheet.util';
 import {
   ALL_KINDS,
   allElements,
@@ -41,6 +42,9 @@ import { RoomTool } from './tools/room.tool';
 import { SelectTool } from './tools/select.tool';
 import { WallTool } from './tools/wall.tool';
 import { WireTool } from './tools/wire.tool';
+
+/** How an element is drawn on the active sheet: editable, dimmed context, or not drawn. */
+export type SheetState = 'edit' | 'dim' | 'hide';
 
 /** What the pointer that is currently down is doing. */
 type Gesture = 'none' | 'tool' | 'marquee' | 'pan' | 'multitouch';
@@ -109,6 +113,15 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
     return this.editor.tool() === 'select' ? '' : 'cursor-crosshair';
   });
 
+  // ---- room sheets ----------------------------------------------------------------------
+  /** What belongs to the open room sheet; null on the master plan, where everything is editable. */
+  private readonly scope = computed(() => {
+    const id = this.editor.activeSheet();
+    return id ? scopeToRoom(this.documentSnapshot(), id) : null;
+  });
+  readonly sheetRoom = computed(() => this.store.rooms().find((r) => r.id === this.editor.activeSheet()) ?? null);
+  readonly stubs = computed<WireStub[]>(() => [...(this.scope()?.stubs ?? [])]);
+
   readonly hitWidth = computed(() => HIT_WIDTH_PX / this.editor.zoom());
   readonly armedLabel = computed(() => {
     const id = this.editor.armedType();
@@ -122,6 +135,11 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
   ];
 
   constructor() {
+    // Restore (or fit) the view whenever the sheet changes.
+    effect(() => {
+      if (!this.editor.sheetSwitches()) return;
+      untracked(() => requestAnimationFrame(() => this.applySheetView()));
+    });
     // Drop in-progress drafts whenever the active tool changes, wherever the change came from.
     effect(() => {
       this.editor.tool();
@@ -149,6 +167,56 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
   openComponentTool(): void {
     if (this.editor.armedType()) this.editor.setTool('component');
     else this.layout.open('components');
+  }
+
+  backToMaster(): void {
+    this.editor.setSheet(null);
+  }
+
+  toggleContext(): void {
+    this.editor.showContext.update((v) => !v);
+  }
+
+  /** Drawing state of an element on the open sheet. */
+  sheetState(kind: ElementKind, id: string): SheetState {
+    const scope = this.scope();
+    if (!scope) return 'edit';
+    const set = kind === 'wall' ? scope.wallIds : kind === 'component' ? scope.componentIds : scope.wireIds;
+    if (set.has(id)) return 'edit';
+    return this.editor.showContext() ? 'dim' : 'hide';
+  }
+
+  /** Wires that cross the sheet boundary are drawn as stubs instead of full paths. */
+  isStubWire(id: string): boolean {
+    return this.stubs().some((s) => s.wireId === id);
+  }
+
+  /** Short line leaving the inside component towards the wire's destination, plus a label saying where it goes. */
+  stubGeometry(stub: WireStub): { x1: number; y1: number; x2: number; y2: number; lx: number; ly: number; label: string } | null {
+    const comps = this.store.components();
+    const inside = comps.find((c) => c.id === stub.insideId);
+    const outside = comps.find((c) => c.id === stub.outsideId);
+    if (!inside || !outside) return null;
+    const d = distance(inside, outside) || 1;
+    const len = Math.min(0.8, d);
+    const x2 = inside.x + ((outside.x - inside.x) / d) * len;
+    const y2 = inside.y + ((outside.y - inside.y) / d) * len;
+    const room = this.store.rooms().find((r) => r.id === outside.roomId);
+    return {
+      x1: inside.x * this.PX, y1: inside.y * this.PX, x2: x2 * this.PX, y2: y2 * this.PX,
+      lx: x2 * this.PX, ly: y2 * this.PX - 4,
+      label: `→ ${room ? room.label + ': ' : ''}${outside.label}`,
+    };
+  }
+
+  private applySheetView(): void {
+    const saved = this.editor.savedView(this.editor.activeSheet());
+    if (saved) {
+      this.editor.setZoom(saved.zoom);
+      this.editor.setPan(saved.pan);
+    } else {
+      this.fitToView();
+    }
   }
 
   setMode(mode: InteractionMode): void {
@@ -366,7 +434,7 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
       if (!this.marqueeAdditive) this.editor.clearSelection();
       return;
     }
-    const doc = this.documentSnapshot();
+    const doc = this.editableDocument();
     const found = elementsInRect(doc, m, this.activeTool().kinds);
     if (!this.marqueeAdditive) {
       this.editor.setSelection(found);
@@ -377,12 +445,26 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
     this.editor.setSelection(merged);
   }
 
+  /** The whole document, regardless of sheet. */
   private documentSnapshot() {
     return {
       walls: this.store.walls(),
       rooms: this.store.rooms(),
       components: this.store.components(),
       wires: this.store.wires(),
+    };
+  }
+
+  /** The part of the document the user may select on the open sheet (everything on the master plan). */
+  private editableDocument() {
+    const doc = this.documentSnapshot();
+    const scope = this.scope();
+    if (!scope) return doc;
+    return {
+      ...doc,
+      walls: doc.walls.filter((w) => scope.wallIds.has(w.id)),
+      components: doc.components.filter((c) => scope.componentIds.has(c.id)),
+      wires: doc.wires.filter((w) => scope.wireIds.has(w.id)),
     };
   }
 
@@ -465,7 +547,7 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
         this.store.redo();
       } else if (key === 'a') {
         e.preventDefault();
-        this.editor.setSelection(allElements(this.documentSnapshot(), this.activeTool().kinds));
+        this.editor.setSelection(allElements(this.editableDocument(), this.activeTool().kinds));
       }
       return;
     }
@@ -531,7 +613,9 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
   }
 
   fitToView(): void {
-    const walls = this.store.walls();
+    const scope = this.scope();
+    const sheetWalls = scope ? this.store.walls().filter((w) => scope.wallIds.has(w.id)) : [];
+    const walls = sheetWalls.length ? sheetWalls : this.store.walls();
     const vb = this.svgRef.nativeElement.viewBox.baseVal;
     if (!walls.length) {
       this.editor.setZoom(1);
@@ -569,27 +653,32 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
   }
 
   roomHasFill(room: Room): boolean {
-    return this.roomWalls(room).length >= 3;
+    return isRoomClosed(room, this.store.walls());
   }
 
   roomPolygonPoints(room: Room): string {
-    return this.roomWalls(room)
-      .map((w) => `${w.x1 * this.PX},${w.y1 * this.PX}`)
+    return roomPolygon(room, this.store.walls())
+      .map((p) => `${p.x * this.PX},${p.y * this.PX}`)
       .join(' ');
   }
 
   roomLabelPos(room: Room): Point {
-    const walls = this.roomWalls(room);
-    if (!walls.length) return { x: 0, y: 0 };
-    const cx = walls.reduce((s, w) => s + w.x1, 0) / walls.length;
-    const cy = walls.reduce((s, w) => s + w.y1, 0) / walls.length;
+    const poly = roomPolygon(room, this.store.walls());
+    if (!poly.length) return { x: 0, y: 0 };
+    const cx = poly.reduce((s, p) => s + p.x, 0) / poly.length;
+    const cy = poly.reduce((s, p) => s + p.y, 0) / poly.length;
     return { x: cx * this.PX, y: cy * this.PX };
   }
 
   roomAreaLabel(room: Room): string {
-    const walls = this.roomWalls(room);
-    const area = walls.length >= 3 ? shoelaceArea(walls.map((w) => ({ x: w.x1, y: w.y1 }))) : 0;
-    return `${room.label} · ${area.toFixed(1)}m²`;
+    return `${room.label} · ${roomArea(room, this.store.walls()).toFixed(1)}m²`;
+  }
+
+  /** Room fills outside the open sheet are context. */
+  roomState(room: Room): SheetState {
+    const sheet = this.editor.activeSheet();
+    if (!sheet || sheet === room.id) return 'edit';
+    return this.editor.showContext() ? 'dim' : 'hide';
   }
 
   strokeWidthForMm(mm: number): number {

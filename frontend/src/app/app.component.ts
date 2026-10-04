@@ -60,6 +60,11 @@ export class AppComponent {
     this.layout.setOverlayOpen((event.target as HTMLInputElement).checked);
   }
 
+  sheetLabel(): string {
+    const id = this.editor.activeSheet();
+    return this.store.rooms().find((r) => r.id === id)?.label ?? 'Master plan';
+  }
+
   toolLabel(): string {
     const labels: Record<string, string> = { select: 'Select', wall: 'Draw Wall', room: 'Quick Room', wire: 'Wire', component: 'Place Component' };
     return labels[this.editor.tool()] ?? this.editor.tool();

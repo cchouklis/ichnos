@@ -30,6 +30,29 @@ export class EditorStore {
     return s.length === 1 && s[0].kind === 'component' ? s[0].id : null;
   });
 
+  // ---- sheets ----------------------------------------------------------------------
+  /** The room sheet being edited; null is the master plan. */
+  readonly activeSheet = signal<string | null>(null);
+  /** In a room sheet: show the rest of the plan dimmed (never editable). */
+  readonly showContext = signal(true);
+  private readonly sheetViews = new Map<string | null, { zoom: number; pan: Point }>();
+  /** Bumped on every sheet switch so the canvas can restore or fit the view. */
+  readonly sheetSwitches = signal(0);
+
+  /** Switches sheet, remembering this sheet's zoom and pan and clearing the selection. */
+  setSheet(id: string | null): void {
+    if (id === this.activeSheet()) return;
+    this.sheetViews.set(this.activeSheet(), { zoom: this.zoom(), pan: this.pan() });
+    this.activeSheet.set(id);
+    this.selection.set([]);
+    this.sheetSwitches.update((n) => n + 1);
+  }
+
+  /** The view last used on a sheet, if any. */
+  savedView(id: string | null): { zoom: number; pan: Point } | undefined {
+    return this.sheetViews.get(id);
+  }
+
   // ---- viewport -----------------------------------------------------------------
   readonly zoom = signal(1);
   readonly pan = signal<Point>({ x: 80, y: 80 });

@@ -134,6 +134,23 @@ body {
   pointer-events: stroke;
   stroke-linecap: round;
 }
+.dimmed {
+  opacity: 0.28 !important;
+  pointer-events: none;
+}
+.wire-stub {
+  stroke: var(--color-secondary);
+  stroke-width: 2.4;
+  stroke-dasharray: 3 3;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+.stub-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8.5px;
+  fill: var(--plan-comp-label);
+  pointer-events: none;
+}
 .marquee {
   fill: color-mix(in oklab, var(--color-secondary) 14%, transparent);
   stroke: var(--color-secondary);

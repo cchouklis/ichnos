@@ -5,6 +5,7 @@ import { WALL_HEIGHT_MM, WALL_THICKNESS_MM } from '../units/units.util';
 import { IdService } from '../services/id.service';
 import { avoidOverlap, distance, findWallSnap, wireLengthMeters } from '../util/geometry.util';
 import { removeElements } from '../util/selection.util';
+import { assignRoomIds, roomIdAt } from '../util/sheet.util';
 import { EditorStore } from './editor.store';
 
 const MAX_HISTORY = 60;
@@ -90,6 +91,13 @@ export class ProjectStore {
     this.rooms.set(snap.rooms);
     this.components.set(snap.components);
     this.wires.set(snap.wires);
+    this.dropMissingSheet();
+  }
+
+  /** Undo/redo or a delete can remove the room that is open as a sheet; fall back to the master plan. */
+  private dropMissingSheet(): void {
+    const sheet = this.editor.activeSheet();
+    if (sheet && !this.rooms().some((r) => r.id === sheet)) this.editor.setSheet(null);
   }
 
   /** Pushes a PRE-mutation snapshot (call before mutating, or pass one captured earlier — e.g. at drag-start). */
@@ -140,6 +148,7 @@ export class ProjectStore {
     const snap = findWallSnap({ x, y }, this.walls());
     const clear = avoidOverlap(snap ?? { x, y }, this.components());
     const circuits = new Set(this.wires().map((w) => w.circuit));
+    const sheet = this.editor.activeSheet();
     const c: ComponentInstance = {
       id: this.ids.next('comp'),
       type: typeId,
@@ -149,6 +158,8 @@ export class ProjectStore {
       circuit: opts.circuit ?? (circuits.size ? Math.max(...circuits) : 1),
       label: type.label,
       notes: '',
+      // In a room sheet the component belongs to that room; in the master it follows its position.
+      roomId: sheet ?? roomIdAt(clear, { rooms: this.rooms(), walls: this.walls() }),
       ...(opts.mountHeightMm != null ? { mountHeightMm: opts.mountHeightMm } : {}),
     };
     this.pushHistory();
@@ -183,7 +194,18 @@ export class ProjectStore {
         this.components.update((list) => list.map((x) => (x.id === c.id ? { ...x, ...clear } : x)));
       }
     }
+    this.reassignRooms(ids);
     this.pushHistory(preDragSnapshot);
+  }
+
+  /** A component dragged across a room boundary changes room. Outside every room it keeps its sheet's room, or none in the master. */
+  private reassignRooms(ids: readonly string[]): void {
+    const set = new Set(ids);
+    const doc = { rooms: this.rooms(), walls: this.walls() };
+    const sheet = this.editor.activeSheet();
+    this.components.update((list) =>
+      list.map((c) => (set.has(c.id) ? { ...c, roomId: roomIdAt(c, doc) ?? sheet } : c)),
+    );
   }
 
   /** Patches components as ONE undo step. */
@@ -241,6 +263,12 @@ export class ProjectStore {
     }
     this.walls.update((list) => [...list, ...newWalls]);
 
+    const sheet = this.editor.activeSheet();
+    if (sheet) {
+      // Drawing inside a room sheet extends that room.
+      this.addWallsToRoom(sheet, newWalls);
+      return;
+    }
     const first = points[0];
     const last = points[points.length - 1];
     if (newWalls.length >= 3 && distance(first, last) < 0.05) {
@@ -290,20 +318,63 @@ export class ProjectStore {
       });
     }
     this.walls.update((list) => [...list, ...newWalls]);
+    const sheet = this.editor.activeSheet();
+    if (sheet) {
+      this.addWallsToRoom(sheet, newWalls);
+      return;
+    }
     this.rooms.update((list) => [
       ...list,
       { id: this.ids.next('room'), label: `Room ${list.length + 1}`, wallIds: newWalls.map((w) => w.id) },
     ]);
   }
 
+  private addWallsToRoom(roomId: string, newWalls: readonly Wall[]): void {
+    const ids = newWalls.map((w) => w.id);
+    this.rooms.update((list) => list.map((r) => (r.id === roomId ? { ...r, wallIds: [...r.wallIds, ...ids] } : r)));
+  }
+
+  /** Creates an empty room (no walls yet) and returns its id. A room may exist before it is closed. */
+  addRoom(label?: string): string {
+    const id = this.ids.next('room');
+    this.pushHistory();
+    this.rooms.update((list) => [...list, { id, label: label?.trim() || `Room ${list.length + 1}`, wallIds: [] }]);
+    return id;
+  }
+
+  /**
+   * Deletes a room sheet. Keeping its contents leaves walls in the master plan and unassigns its components;
+   * otherwise walls used by no other room, its components and their wires go too.
+   */
+  deleteRoom(roomId: string, keepContents: boolean): void {
+    const room = this.rooms().find((r) => r.id === roomId);
+    if (!room) return;
+    this.pushHistory();
+    if (keepContents) {
+      this.components.update((list) => list.map((c) => (c.roomId === roomId ? { ...c, roomId: null } : c)));
+      this.rooms.update((list) => list.filter((r) => r.id !== roomId));
+    } else {
+      const usedElsewhere = new Set(this.rooms().filter((r) => r.id !== roomId).flatMap((r) => r.wallIds));
+      const refs: ElementRef[] = [
+        ...room.wallIds.filter((id) => !usedElsewhere.has(id)).map((id): ElementRef => ({ kind: 'wall', id })),
+        ...this.components().filter((c) => c.roomId === roomId).map((c): ElementRef => ({ kind: 'component', id: c.id })),
+      ];
+      const next = removeElements(
+        { walls: this.walls(), rooms: this.rooms().filter((r) => r.id !== roomId), components: this.components(), wires: this.wires() },
+        refs,
+      );
+      this.walls.set([...next.walls]);
+      this.rooms.set([...next.rooms]);
+      this.components.set([...next.components]);
+      this.wires.set([...next.wires]);
+    }
+    this.editor.setSelection([]);
+    this.dropMissingSheet();
+  }
+
   renameRoom(id: string, label: string): void {
     this.pushHistory();
     this.rooms.update((list) => list.map((r) => (r.id === id ? { ...r, label } : r)));
-  }
-
-  removeRoomFill(id: string): void {
-    this.pushHistory();
-    this.rooms.update((list) => list.filter((r) => r.id !== id));
   }
 
   // ---------------------------------------------------------------------
@@ -363,9 +434,10 @@ export class ProjectStore {
     this.projectName.set(dto.name);
     this.walls.set(dto.walls);
     this.rooms.set(dto.rooms);
-    this.components.set(dto.components);
+    this.components.set(assignRoomIds(dto));
     this.wires.set(dto.wires);
     this.editor.clearSelection();
+    this.dropMissingSheet();
   }
 
   // ---------------------------------------------------------------------
@@ -404,7 +476,9 @@ export class ProjectStore {
     const o4 = comp('outlet-duplex', 2.8, 0.08, 0, 3, 'Outlet — North');
     const usb = comp('outlet-usb', 1.2, 0.08, 0, 3, 'USB Outlet');
     const jbox = comp('junction', 2.0, 0.08, 0, 2, 'Ceiling Junction');
-    this.components.set([panel, sw1, sw2, light, o1, o2, o3, o4, usb, jbox]);
+    this.components.set(
+      assignRoomIds({ walls: this.walls(), rooms: this.rooms(), wires: [], components: [panel, sw1, sw2, light, o1, o2, o3, o4, usb, jbox] }),
+    );
 
     const wire = (a: ComponentInstance, b: ComponentInstance, circuit: number): Wire => ({
       id: this.ids.next('wire'),
