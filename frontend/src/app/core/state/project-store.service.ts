@@ -44,7 +44,6 @@ export class ProjectStore {
 
   // ---- UI / editor state ----------------------------------------------
   readonly view = signal<ViewMode>('2d');
-  readonly simulate = signal(false);
   readonly bgImage = signal<string | null>(null);
   readonly bgOpacity = signal(0.5);
 
@@ -134,10 +133,6 @@ export class ProjectStore {
   // ---------------------------------------------------------------------
   setView(view: ViewMode): void {
     this.view.set(view);
-  }
-
-  toggleSimulate(): void {
-    this.simulate.update((v) => !v);
   }
 
   // ---------------------------------------------------------------------
@@ -490,7 +485,7 @@ export class ProjectStore {
       wire(panel, sw1, 2),
       wire(sw1, jbox, 2),
       wire(jbox, sw2, 2),
-      wire(jbox, light, 2),
+      wire(sw2, light, 2),
       wire(panel, o1, 3),
       wire(o1, o2, 3),
       wire(o2, o4, 3),

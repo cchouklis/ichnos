@@ -1,6 +1,6 @@
 <header
   class="navbar relative h-14 min-h-0 gap-2 border-b border-base-content/10 bg-base-100 px-2 lg:px-3"
-  [class.simulating]="store.simulate()"
+  [class.simulating]="sim.enabled()"
 >
   <div class="power-sweep absolute inset-x-0 -bottom-px h-[2px]"></div>
 
@@ -77,11 +77,11 @@
   <button
     type="button"
     class="btn btn-sm gap-1.5"
-    [class.btn-primary]="store.simulate()"
-    [class.btn-ghost]="!store.simulate()"
+    [class.btn-primary]="sim.enabled()"
+    [class.btn-ghost]="!sim.enabled()"
     title="Toggle power simulation"
-    [attr.aria-pressed]="store.simulate()"
-    (click)="toggleSimulate()"
+    [attr.aria-pressed]="sim.enabled()"
+    (click)="sim.toggle()"
   >
     <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 11-14h-8l1-6z"/></svg>
     <span class="hidden lg:inline">Simulate Power</span>

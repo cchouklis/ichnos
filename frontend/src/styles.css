@@ -189,6 +189,15 @@ body {
   opacity: 1;
   filter: drop-shadow(0 0 4px color-mix(in oklab, var(--color-secondary) 70%, transparent));
 }
+.wire-path.unpowered {
+  opacity: 0.3;
+}
+.wire-path.reverse {
+  animation-direction: reverse;
+}
+.light-glow {
+  pointer-events: none;
+}
 .wire-path.energized {
   stroke-dasharray: 6 5;
   animation: flow-dash 1s linear infinite;

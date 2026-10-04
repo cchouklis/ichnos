@@ -13,6 +13,10 @@
     (dblclick)="onSvgDoubleClick()"
   >
     <defs>
+      <radialGradient id="lightGlow">
+        <stop offset="0" stop-color="#ffd66b" stop-opacity="0.85" />
+        <stop offset="1" stop-color="#ffd66b" stop-opacity="0" />
+      </radialGradient>
       <pattern id="gridFine" width="12" height="12" patternUnits="userSpaceOnUse">
         <path d="M12 0H0V12" fill="none" class="grid-line" stroke-width="1" />
       </pattern>
@@ -76,7 +80,9 @@
           <path
             [attr.d]="wireD(wire)"
             class="wire-path"
-            [class.energized]="store.simulate()"
+            [class.energized]="isEnergized(wire)"
+            [class.reverse]="isReversed(wire)"
+            [class.unpowered]="isUnpowered(wire)"
             [class.selected]="isSelected('wire', wire.id)"
             [class.dimmed]="sheetState('wire', wire.id) === 'dim'"
             [attr.stroke]="wireColor(wire.circuit)"
@@ -111,6 +117,9 @@
             [attr.data-el-id]="sheetState('component', c.id) === 'edit' ? c.id : null"
             [attr.transform]="compTransform(c)"
           >
+            @if (glow(c); as g) {
+              <circle class="light-glow" [attr.r]="g.radius" [attr.opacity]="g.opacity" fill="url(#lightGlow)"></circle>
+            }
             <rect class="comp-hit" x="-17" y="-17" width="34" height="34"></rect>
             <circle
               class="comp-outline"
