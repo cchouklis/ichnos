@@ -108,7 +108,7 @@ export function elementsInRect(doc: PlanDocument, rect: Rect, kinds: readonly El
 
 /**
  * Returns a copy of the document without the referenced elements, keeping it consistent:
- * wires attached to a removed component go too, and a room whose boundary lost a wall is dropped.
+ * wires attached to a removed component go too, and removed walls leave every room's wall list.
  */
 export function removeElements(doc: PlanDocument, refs: readonly ElementRef[]): PlanDocument {
   const ids = (kind: ElementKind) => new Set(refs.filter((r) => r.kind === kind).map((r) => r.id));
@@ -117,7 +117,8 @@ export function removeElements(doc: PlanDocument, refs: readonly ElementRef[]): 
   const wireIds = ids('wire');
   return {
     walls: doc.walls.filter((w) => !wallIds.has(w.id)),
-    rooms: doc.rooms.filter((r) => !r.wallIds.some((id) => wallIds.has(id))),
+    // A room survives losing a wall (it may simply be open again); the wall just leaves its list.
+    rooms: doc.rooms.map((r) => (r.wallIds.some((id) => wallIds.has(id)) ? { ...r, wallIds: r.wallIds.filter((id) => !wallIds.has(id)) } : r)),
     components: doc.components.filter((c) => !compIds.has(c.id)),
     wires: doc.wires.filter((w) => !wireIds.has(w.id) && !compIds.has(w.a) && !compIds.has(w.b)),
   };

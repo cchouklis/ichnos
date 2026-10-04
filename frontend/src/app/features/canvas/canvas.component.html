@@ -31,13 +31,14 @@
       <!-- rooms -->
       <g>
         @for (room of store.rooms(); track room.id) {
-          @if (roomHasFill(room)) {
-            <polygon [attr.points]="roomPolygonPoints(room)" class="room-fill"></polygon>
+          @if (roomHasFill(room) && roomState(room) !== 'hide') {
+            <polygon [attr.points]="roomPolygonPoints(room)" class="room-fill" [class.dimmed]="roomState(room) === 'dim'"></polygon>
             <text
               [attr.x]="roomLabelPos(room).x"
               [attr.y]="roomLabelPos(room).y"
               text-anchor="middle"
               class="room-label"
+              [class.dimmed]="roomState(room) === 'dim'"
             >{{ roomAreaLabel(room) }}</text>
           }
         }
@@ -46,13 +47,16 @@
       <!-- walls -->
       <g>
         @for (w of store.walls(); track w.id) {
+          @if (sheetState('wall', w.id) !== 'hide') {
           <line
             [attr.x1]="w.x1 * PX" [attr.y1]="w.y1 * PX"
             [attr.x2]="w.x2 * PX" [attr.y2]="w.y2 * PX"
             class="wall-line"
             [class.selected]="isSelected('wall', w.id)"
+            [class.dimmed]="sheetState('wall', w.id) === 'dim'"
             [attr.stroke-width]="wallStrokeWidth(w)"
           ></line>
+          @if (sheetState('wall', w.id) === 'edit') {
           <line
             [attr.x1]="w.x1 * PX" [attr.y1]="w.y1 * PX"
             [attr.x2]="w.x2 * PX" [attr.y2]="w.y2 * PX"
@@ -60,36 +64,51 @@
             data-el-kind="wall" [attr.data-el-id]="w.id"
             [attr.stroke-width]="Math.max(hitWidth(), wallStrokeWidth(w))"
           ></line>
+          }
+          }
         }
       </g>
 
       <!-- wiring -->
       <g>
         @for (wire of store.wires(); track wire.id) {
+          @if (sheetState('wire', wire.id) !== 'hide' && !isStubWire(wire.id)) {
           <path
             [attr.d]="wireD(wire)"
             class="wire-path"
             [class.energized]="store.simulate()"
             [class.selected]="isSelected('wire', wire.id)"
+            [class.dimmed]="sheetState('wire', wire.id) === 'dim'"
             [attr.stroke]="wireColor(wire.circuit)"
           ></path>
+          @if (sheetState('wire', wire.id) === 'edit') {
           <path
             [attr.d]="wireD(wire)"
             class="hit-line"
             data-el-kind="wire" [attr.data-el-id]="wire.id"
             [attr.stroke-width]="hitWidth()"
           ></path>
+          }
+          }
+        }
+        @for (stub of stubs(); track stub.wireId) {
+          @if (stubGeometry(stub); as g) {
+            <line [attr.x1]="g.x1" [attr.y1]="g.y1" [attr.x2]="g.x2" [attr.y2]="g.y2" class="wire-stub"></line>
+            <text [attr.x]="g.lx" [attr.y]="g.ly" class="stub-label">{{ g.label }}</text>
+          }
         }
       </g>
 
       <!-- components -->
       <g>
         @for (c of store.components(); track c.id) {
+          @if (sheetState('component', c.id) !== 'hide') {
           <g
             class="comp-group"
             [class.selected]="isSelected('component', c.id)"
-            data-el-kind="component"
-            [attr.data-el-id]="c.id"
+            [class.dimmed]="sheetState('component', c.id) === 'dim'"
+            [attr.data-el-kind]="sheetState('component', c.id) === 'edit' ? 'component' : null"
+            [attr.data-el-id]="sheetState('component', c.id) === 'edit' ? c.id : null"
             [attr.transform]="compTransform(c)"
           >
             <rect class="comp-hit" x="-17" y="-17" width="34" height="34"></rect>
@@ -107,6 +126,7 @@
               {{ c.label }}
             </text>
           </g>
+          }
         }
       </g>
 
@@ -164,6 +184,18 @@
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M8 8c3 0 5 8 8 8"/></svg>
       </cp-tool-button>
   </div>
+
+  <!-- room sheet banner -->
+  @if (sheetRoom(); as room) {
+    <div class="absolute left-2 top-12 z-10 flex max-w-[calc(100%-1rem)] items-center gap-2 rounded-box border border-secondary/40 bg-base-100/95 px-2.5 py-1 text-xs shadow-lg backdrop-blur md:left-64 md:top-2" role="status">
+      <span class="truncate font-semibold">Room sheet: {{ room.label }}</span>
+      <label class="flex cursor-pointer items-center gap-1 whitespace-nowrap text-base-content/80">
+        <input type="checkbox" class="toggle toggle-xs" [checked]="editor.showContext()" (change)="toggleContext()" />
+        Surroundings
+      </label>
+      <button type="button" class="btn btn-xs btn-primary" (click)="backToMaster()">Master plan</button>
+    </div>
+  }
 
   <!-- touch interaction mode: what a tap does (mouse users have right-click and Ctrl+drag instead) -->
   <div

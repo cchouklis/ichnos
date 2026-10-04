@@ -40,7 +40,7 @@ test('elementsInRect respects kinds filter', () => {
   assert.equal(elementsInRect(doc, rect).length, 3);
 });
 
-test('removeElements cascades to wires and rooms and does not mutate input', () => {
+test('removeElements cascades to wires and room wall lists and does not mutate input', () => {
   const doc = {
     walls: [wall('w1', 0, 0, 1, 0), wall('w2', 1, 0, 1, 1)],
     rooms: [{ id: 'r1', label: 'R', wallIds: ['w1', 'w2'] }],
@@ -51,7 +51,7 @@ test('removeElements cascades to wires and rooms and does not mutate input', () 
   assert.equal(a.components.length, 1);
   assert.equal(a.wires.length, 0);
   const b = removeElements(doc, [{ kind: 'wall', id: 'w1' }]);
-  assert.equal(b.rooms.length, 0);
+  assert.deepEqual(b.rooms[0].wallIds, ['w2']);
   assert.equal(b.walls.length, 1);
   assert.equal(doc.walls.length, 2);
 });

@@ -10,7 +10,8 @@ export interface WallWire extends Omit<Wall, 'thicknessMm' | 'heightMm'> {
   height: number;
 }
 
-export interface ComponentWire extends Omit<ComponentInstance, 'mountHeightMm'> {
+/** The current backend has no room sheets: roomId is not sent and is re-derived from geometry on load. */
+export interface ComponentWire extends Omit<ComponentInstance, 'mountHeightMm' | 'roomId'> {
   mountHeight?: number;
 }
 
@@ -27,7 +28,7 @@ export function toWire(dto: ProjectDto): ProjectWire {
       thickness: mmToMeters(thicknessMm),
       height: mmToMeters(heightMm),
     })),
-    components: dto.components.map(({ mountHeightMm, ...c }) =>
+    components: dto.components.map(({ mountHeightMm, roomId: _roomId, ...c }) =>
       mountHeightMm === undefined ? c : { ...c, mountHeight: mmToMeters(mountHeightMm) },
     ),
   };

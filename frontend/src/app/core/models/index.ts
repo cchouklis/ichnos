@@ -27,6 +27,8 @@ export interface ComponentInstance {
   circuit: number;
   label: string;
   notes: string;
+  /** Room this component belongs to; null/undefined = only in the master plan. Undefined also means "not derived yet" for data loaded from older saves. */
+  roomId?: string | null;
   /** Override for the type's default mount height, in millimetres. */
   mountHeightMm?: number;
 }
