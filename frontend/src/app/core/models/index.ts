@@ -43,6 +43,8 @@ export interface Wire {
 
 export type ComponentCategory = 'outlets' | 'switches' | 'lighting' | 'distribution' | 'boxes';
 
+export type PowerRole = 'source' | 'conductor' | 'switch' | 'dimmer' | 'load';
+
 export interface ComponentType {
   id: string;
   cat: ComponentCategory;
@@ -50,6 +52,7 @@ export interface ComponentType {
   color: string;
   /** Default mount height in millimetres. */
   mountHeightMm: number;
+  power: PowerRole;
   icon: string;
   volts: number;
   amps: number;

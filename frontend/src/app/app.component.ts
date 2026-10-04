@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, HostListener, computed, effect, inject, signal } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { EditorStore } from './core/state/editor.store';
+import { SimulationService } from './core/simulation/simulation.service';
 import { LayoutStore } from './core/state/layout.store';
 import { ProjectStore } from './core/state/project-store.service';
 import { ComplianceService } from './core/services/compliance.service';
@@ -11,6 +12,7 @@ import { TopbarComponent } from './features/topbar/topbar.component';
 import { CanvasComponent } from './features/canvas/canvas.component';
 import { Viewer3dComponent } from './features/viewer3d/viewer3d.component';
 import { DrawerComponent } from './features/drawer/drawer.component';
+import { SimulationPanelComponent } from './features/simulation/simulation-panel.component';
 import { ThemeSwitchComponent } from './features/theme-switch/theme-switch.component';
 
 type MobileSheet = 'menu' | null;
@@ -19,13 +21,14 @@ type MobileSheet = 'menu' | null;
   selector: 'cp-root',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, TopbarComponent, CanvasComponent, Viewer3dComponent, DrawerComponent, ThemeSwitchComponent],
+  imports: [CommonModule, TopbarComponent, CanvasComponent, Viewer3dComponent, DrawerComponent, ThemeSwitchComponent, SimulationPanelComponent],
   templateUrl: './app.component.html',
 })
 export class AppComponent {
   readonly store = inject(ProjectStore);
   readonly layout = inject(LayoutStore);
   readonly editor = inject(EditorStore);
+  readonly sim = inject(SimulationService);
   readonly compliance = inject(ComplianceService);
   readonly exportSvc = inject(ExportService);
   readonly underlay = inject(UnderlayService);

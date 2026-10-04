@@ -18,6 +18,7 @@ import type { ComponentInstance, ElementKind, ElementRef as PlanElementRef, Poin
 import { typeById } from '../../core/data/component-types.data';
 import { mmToMeters } from '../../core/units/units.util';
 import { EditorStore, type InteractionMode } from '../../core/state/editor.store';
+import { SimulationService } from '../../core/simulation/simulation.service';
 import { LayoutStore } from '../../core/state/layout.store';
 import { ProjectStore } from '../../core/state/project-store.service';
 import { ThemeService } from '../../core/theme/theme.service';
@@ -49,6 +50,8 @@ export type SheetState = 'edit' | 'dim' | 'hide';
 /** What the pointer that is currently down is doing. */
 type Gesture = 'none' | 'tool' | 'marquee' | 'pan' | 'multitouch';
 
+const GLOW_BASE_RADIUS = 20;
+const GLOW_LEVEL_RADIUS = 44;
 const MARQUEE_MIN_PX = 3;
 const HIT_WIDTH_PX = 18;
 const KIND_SET: ReadonlySet<string> = new Set<ElementKind>(ALL_KINDS);
@@ -64,6 +67,7 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
   readonly store = inject(ProjectStore);
   readonly editor = inject(EditorStore);
   private readonly layout = inject(LayoutStore);
+  private readonly sim = inject(SimulationService);
   private readonly dragDrop = inject(DragDropService);
   private readonly icons = inject(IconRegistryService);
   private readonly theme = inject(ThemeService);
@@ -318,9 +322,18 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
       }
     }
 
+    if (this.toggleSwitchAt(info)) return;
+
     this.gesture = 'tool';
     tool.primaryDown(info);
     if (tool.id === 'select' && !info.hit) this.beginMarquee(e, info.plan);
+  }
+
+  private toggleSwitchAt(info: PointerInfo): boolean {
+    const hit = info.hit;
+    if (!this.sim.enabled() || hit?.kind !== 'component' || !this.sim.isControl(hit.id)) return false;
+    this.sim.toggleSwitch(hit.id);
+    return true;
   }
 
   /** Touch "select" mode: tap an element to toggle it, drag from empty space to box-select. */
@@ -699,6 +712,24 @@ export class CanvasComponent implements AfterViewInit, OnDestroy {
 
   wireColor(circuit: number): string {
     return circuitColor(this.theme.effective(), circuit);
+  }
+
+  isEnergized(wire: Wire): boolean {
+    return this.sim.flowOf(wire.id) !== undefined;
+  }
+
+  isReversed(wire: Wire): boolean {
+    return this.sim.flowOf(wire.id)?.from === wire.b;
+  }
+
+  isUnpowered(wire: Wire): boolean {
+    return this.sim.enabled() && !this.isEnergized(wire);
+  }
+
+  glow(c: ComponentInstance): { radius: number; opacity: number } | null {
+    const level = this.sim.levelOf(c.id);
+    if (typeById(c.type).power !== 'load' || level <= 0) return null;
+    return { radius: GLOW_BASE_RADIUS + GLOW_LEVEL_RADIUS * level, opacity: 0.3 + 0.7 * level };
   }
 
   compTransform(c: ComponentInstance): string {
